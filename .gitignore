@@ -1,0 +1,13 @@
+ios/RoomCapture.xcodeproj/
+ios/RoomCapture/Info.plist
+ios/build/
+.DS_Store
+*.xcuserstate
+xcuserdata/
+.venv/
+third_party/
+out/
+.env
+node_modules/
+pipeline/spend.jsonl
+pipeline/catalog/

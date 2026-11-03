@@ -19,7 +19,7 @@ LINE and WhatsApp come last. The engine and the website come first; a chat app o
 
 1. **The job is "buy the right thing", not "make a pretty render".** Every feature must move the user closer to a confident purchase.
 2. **Trust comes from honest numbers.** Every size has a value, a ± and a source (measured / estimated / user-entered / listed by store / unknown). Never invent a number.
-3. **When unsure, ask, don't guess.** If part of the room is missing or two measurements disagree, the engine asks the user to film that part again or measure one thing with a tape.
+3. **Show the uncertainty, keep moving.** Sizes we only partly saw are shown with a wider ± and a small "approx." label; the engine never stops to quiz the user about sizes. The user can still correct any size in chat ("my desk is 100 cm").
 4. **The model proposes, code enforces.** AI handles taste, language and messy listings. Plain code handles sizes, fit, budget and totals, every time.
 5. **Video in, everything else derived.** One capture gives scale, 3D shape, objects, style and the frames for realistic photos.
 6. **Design for no LiDAR.** Most phones in Taiwan have none, including ours (base iPhone 17). LiDAR is a bonus when present, never required.
@@ -31,15 +31,15 @@ LINE and WhatsApp come last. The engine and the website come first; a chat app o
 | Topic | Decision |
 |---|---|
 | Input | A walk-around video (30–60 s). Photos optional. |
-| Capture app | Our iOS app records the video plus ARKit camera poses, intrinsics and detected planes (for real scale). Web upload of a plain video is the fallback (scale from a reference such as a door). |
-| Accuracy | Run a test first and pick the method with the lowest error (see T1). |
-| Unclear sizes | Ask the user to re-film or measure that part. |
+| Capture app | Option C: a small iOS capture app (`ios/RoomCapture`) records the video plus ARKit camera poses, intrinsics, detected planes and feature points (real scale without LiDAR), then hands it to the website. The website stays the main app. Web upload of a plain video stays a fallback (scale from one known size such as a door). |
+| Accuracy | Run a test first and pick the method with the lowest error (see T1). MapAnything is excluded for now (no GPU budget yet); revisit when a card is available. |
+| Unclear sizes | Show them with a wider ± ("approx."), never block on them. The demo's point is that mapping, 3D and buying work end to end; a small error rate is acceptable and stated. |
 | Taste | Chat plus inspiration photos the user uploads. |
 | Views | (a) 3D view of the room, as realistic as we can make it. (b) Realistic photo = a frame from the video, edited with Meta's image model to add or swap furniture. |
-| UI | A chat UI inside the website. LINE / WhatsApp later. |
+| UI | A chat UI inside the website. The chat is a **personal AI shopping agent** that calls tools (room, search, place, move, fit, photo, list) and updates the 3D view live, not a fixed question script. LINE / WhatsApp later. |
 | Buying | Shopee links; the user buys. No agent checkout yet. |
 | Fit | Product sizes come from the listing (parsed by AI, with confidence) and are checked against the room by code. |
-| Products | Shopee Taiwan via Apify scrapers for now, results cached. Affiliate API or shop partnerships later. |
+| Products | Shopee Taiwan via Apify scrapers for now, results cached. Budget cap: **at most 3 scraper runs and US$1 total**, each run capped with Apify's `maxTotalChargeUsd`; usage checked via Apify's usage API before each run. Affiliate API or shop partnerships later. |
 | SAM | Still needed: per-object outlines → per-object sizes, tracking across frames, clickable objects in 3D, clean cut-outs for edits. |
 | Repo | This repo. History restarted for the new direction; old Desk code is backed up in `../desk-backup-before-reset.bundle`. Rename later. |
 
@@ -47,8 +47,8 @@ LINE and WhatsApp come last. The engine and the website come first; a chat app o
 
 1. **Capture.** Open the capture app (or upload a video on the website). Walk the room slowly for 30–60 s. Upload.
 2. **Processing (about 1–2 min).** The page shows progress: frames extracted → scale fixed → 3D built → objects found → sizes measured.
-3. **Room check.** The chat shows "Here's your room": the 3D view, the list of objects with sizes and ±, and anything we could not measure. Example: "I couldn't see the right wall clearly. Film it again, or tell me its width."
-4. **Taste.** The chat asks at most 3 questions (budget, keep or replace, rental rules) and invites inspiration photos.
+3. **Your room.** The chat shows "Here's your room": the 3D view and the objects with sizes and ± (partly seen ones marked "approx.").
+4. **Talk to the agent.** Free chat: "I need a desk lamp and more storage under NT$3,000", "make it more Japanese", inspiration photos. The agent asks only what it needs (often budget) and acts through tools.
 5. **Proposals.** For each slot ("a desk for the window wall") the chat shows 2–3 real products: photo, price in NT$, size, a fit badge ("fits, 14 cm spare"; "won't fit up a 75 cm stairwell") and a Shopee link.
 6. **See it.** Tap "Show me" → a realistic photo of your room with that item. Tap "3D" → the item appears in the 3D view at true size.
 7. **Refine.** Chat: "cheaper", "more wood", "keep my chair". The plan updates.
@@ -62,9 +62,9 @@ iOS capture app (Swift, ARKit)          Website (React + TypeScript + Tailwind, 
   + planes                                         │
         │ upload                                   │ JSON API
         ▼                                          ▼
-┌────────────────── Engine API (Cloudflare Worker, TypeScript, Bun) ──────────────────┐
+┌────────────────── Engine API (TypeScript, Bun; host to decide) ─────────────────────┐
 │ rooms · jobs · chat turns · proposals · fit · catalog search                         │
-│ storage: R2 (video, frames, renders) · D1 or KV (room memory, sessions)             │
+│ storage: local files for now (video, frames, renders, room memory, sessions)        │
 └──────┬───────────────────────┬──────────────────────────┬────────────────────────────┘
        │                       │                          │
        ▼                       ▼                          ▼
@@ -79,7 +79,7 @@ iOS capture app (Swift, ARKit)          Website (React + TypeScript + Tailwind, 
 Planned folders:
 
 - `ios/`: capture app (rebuild from the backup's ARKit code where useful).
-- `engine/`: Cloudflare Worker API.
+- `engine/`: Bun API server (no Cloudflare Worker; host to decide).
 - `gpu/`: Python service for MapAnything and Depth Anything 3, deployed to a GPU host (Modal, Hugging Face Endpoint or Baseten; to decide).
 - `web/`: the website.
 - `eval/`: accuracy test data, scripts and results.
@@ -101,7 +101,7 @@ Each test has a pass bar. If one fails, we change the plan before building on it
 
 | # | Test | How | Pass |
 |---|---|---|---|
-| T1 | **Measurement accuracy** (the core claim) | Tape-measure ~7 items in our room (3 walls, bed, desk, door, window). Record one walk-around with ARKit poses. Measure each item with: (a) ARKit planes and raycasts, (b) MapAnything with ARKit poses, (c) Depth Anything 3 metric on single frames, (d) reference-object scale (door). | Best method: median error ≤5%, no item worse than 10%. Output: error table and chart per item and method. |
+| T1 | **Measurement accuracy** (the core claim) | Tape-measure ~7 items in our room (3 walls, bed, desk, door, window). Record one walk-around with the capture app. Measure each item with: (a) ARKit planes, (b) ARKit poses + SAM 3.1 masks (footprint on the floor plane, height from frames), (c) reference-object scale from the door only (simulates a plain web video), (d) optional: Depth Anything 3 metric on the Mac. MapAnything later. | Best method: median error ≤5%, no item worse than 10%. Output: error table and chart per item and method. |
 | T2 | **Object sizes via SAM** | SAM 3.1 masks on frames → lift into the T1 3D model → box size per object. | Bed, desk and door within 10%. |
 | T3 | **Shopee product data** | Apify scraper, Taiwan, 10 furniture searches in Traditional Chinese (e.g. 白色書櫃 寬60). Muse parses sizes from title, specs and description. | ≥60% of results have usable W×D×H; parsed sizes match the listing text on a 20-item spot check. Note cost and speed. |
 | T4 | **Realistic photo edit** | `muse-image-1.0` edits on 3 frames from the video: add a lamp, swap the chair, add a rug. | The room stays recognisably ours (walls, light, perspective); the item looks plausible. Latency noted. |
@@ -131,22 +131,22 @@ Each item lists what "done" means. Details get added under each item as we go.
 - [ ] 2.2 Muse Spark labels objects and style per keyframe; SAM 3.1 outlines and tracks them.
 - [ ] 2.3 Lift masks into 3D → object boxes and sizes, as Measurements.
 - [ ] 2.4 Walls, floor, ceiling, doors and windows from planes and 3D.
-- [ ] 2.5 Coverage and disagreement checks → a list of "please re-film / please measure" requests.
-- [ ] 2.6 Store the Room in D1/KV. **Done:** the API returns Room JSON for our test room, matching T1 within the chosen method's error.
+- [ ] 2.5 Coverage checks → each size gets a ± that widens when the object was only partly seen (no blocking questions).
+- [ ] 2.6 Store the Room as JSON. **Done:** the API returns Room JSON for our test room, matching T1 within the chosen method's error.
 
 ### Phase 3 – Website shell
 - [ ] 3.1 Upload page and job progress.
-- [ ] 3.2 Chat UI (messages, product cards, image upload for inspiration).
+- [ ] 3.2 Chat UI: streaming agent messages, tool-result cards (products, fit badges, photos), image upload for inspiration.
 - [ ] 3.3 3D viewer: point cloud or mesh of the room, object boxes, click to select, products at true size.
 - [ ] 3.4 Shareable room link. **Done:** the link opens on phone and laptop (T5).
 
 ### Phase 4 – Taiwan catalog
-- [ ] 4.1 Apify fetch for ~20 furniture categories, Traditional Chinese queries; cache in D1 (T3).
+- [ ] 4.1 Apify fetch, max 3 runs and US$1 total, Traditional Chinese queries covering the main furniture categories; cache results to a local file (T3).
 - [ ] 4.2 Muse extracts dimensions, material and color from each listing, with confidence.
 - [ ] 4.3 Search function: slot + taste → ranked products.
 
 ### Phase 5 – Planner and fit
-- [ ] 5.1 Taste intake via chat (≤3 questions) and inspiration photos → TasteProfile.
+- [ ] 5.1 Shopping agent: Muse with tools get_room, search_products, place_item, move_item, remove_item, check_fit, render_photo, set_taste, shopping_list. Taste and budget come from the conversation and photos → TasteProfile.
 - [ ] 5.2 Planner (Muse): room + taste → slots with size ranges and zh search terms.
 - [ ] 5.3 Fit engine (code): wall space, clearance, door swing, entry route (door, stairs, elevator), no-drill and tip-over flags.
 - [ ] 5.4 Refinement turns ("cheaper", "keep my chair") update the plan.
@@ -169,6 +169,8 @@ Each item lists what "done" means. Details get added under each item as we go.
 - Voting on proposals in a LINE group.
 - Agent checkout when Visa / AP2 support reaches Taiwan.
 - Shop dashboard: pre-measured leads.
+
+Current focus (Wed 02:00): the 3D model from the video and the website's UX/UI. Shopee and chat apps come after.
 
 ## 10. Hackathon cut (by Thu 09:00 Taiwan time)
 

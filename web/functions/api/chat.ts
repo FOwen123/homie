@@ -1,0 +1,176 @@
+// The Roomie shopping agent: Muse Spark with tools that read the room, search the Shopee catalog, and
+// place/move/remove items. Tools run here, on our own code (fit checks are deterministic); the client
+// gets back the reply, the new room state and rich cards. Stateless: the client sends history + state.
+import { checkFit, findSpot, productMap } from "../../src/lib/fit";
+import type { Card, ChatTurn, Placement, Product, Room, RoomState } from "../../src/lib/types";
+import { type Env, json, loadCatalog, loadRoom, meta, underLimit } from "../_lib";
+
+const MODEL = "muse-spark-1.3"; // standard mode: visitors' chats and photos stay out of model training
+const MAX_STEPS = 6;
+
+const tools = [
+  fn("search_products", "Search the cached Shopee Taiwan catalog. Returns up to 8 products with price, size and category.", {
+    query: { type: "string", description: "Keywords in Traditional Chinese or English, e.g. 收納櫃 白色, lamp" },
+    category: { type: "string", enum: ["cabinet", "shelf", "drawer unit", "storage box", "lamp", "floor lamp", "rug", "any"] },
+    max_price: { type: "number", description: "NT$" }, max_width_cm: { type: "number" }, max_depth_cm: { type: "number" }, max_height_cm: { type: "number" },
+  }, ["query"]),
+  fn("show_products", "Show 1-3 products to the user as cards with a fit check. Always do this after choosing candidates.", {
+    product_ids: { type: "array", items: { type: "string" } }, title: { type: "string" },
+    near_object_id: { type: "string", description: "existing object to place them near, if the user said where" },
+  }, ["product_ids"]),
+  fn("place_item", "Put a product into the user's 3D room. Code finds a free spot against a wall (or on top of near_object for lamps) and checks the fit.", {
+    product_id: { type: "string" }, near_object_id: { type: "string" },
+    replace_object_id: { type: "string", description: "existing object this product replaces (it gets hidden)" },
+  }, ["product_id"]),
+  fn("move_item", "Move a placed product next to another object.", { placement_id: { type: "string" }, near_object_id: { type: "string" } }, ["placement_id", "near_object_id"]),
+  fn("remove_item", "Remove a placed product, or hide an existing object (to plan replacing it).", {
+    placement_id: { type: "string" }, object_id: { type: "string" },
+  }, []),
+  fn("update_object_size", "The user corrected the size of something in their room.", {
+    object_id: { type: "string" }, w_cm: { type: "number" }, d_cm: { type: "number" }, h_cm: { type: "number" },
+  }, ["object_id"]),
+  fn("set_taste", "Remember the user's style, budget and constraints.", {
+    style: { type: "string" }, budget: { type: "number", description: "NT$ total" }, notes: { type: "string" },
+  }, []),
+  fn("add_to_list", "Add products to the shopping list.", { product_ids: { type: "array", items: { type: "string" } } }, ["product_ids"]),
+  fn("show_list", "Show the shopping list with Shopee links and the total.", {}, []),
+  fn("render_photo", "Make a realistic photo of the user's real room with a placed product (Muse Image). Use when the user wants to see how it looks.", {
+    placement_id: { type: "string" },
+  }, ["placement_id"]),
+];
+
+function fn(name: string, description: string, properties: object, required: string[]) {
+  return { type: "function", function: { name, description, parameters: { type: "object", properties, required, additionalProperties: false } } };
+}
+
+const cm = (m: number) => Math.round(m * 100);
+function describeRoom(room: Room, state: RoomState, pm: Map<string, Product>) {
+  const objs = room.objects.filter((o) => !state.removed.includes(o.id)).map((o) => {
+    const s = state.sizeEdits[o.id] ?? o.size;
+    return `- ${o.id}: ${o.label}, ${cm(s.w)}×${cm(s.d)}×${cm(s.h)} cm${o.source === "approx" && !state.sizeEdits[o.id] ? ` (approx ±${o.pm_cm})` : ""}, at x=${o.center[0].toFixed(1)} z=${o.center[2].toFixed(1)}`;
+  });
+  const doors = room.shell.walls.flatMap((w) => w.openings.map((op) => `${op.type} on the ${w.id} wall, ${cm(op.to - op.from)} cm wide`));
+  const placed = state.placements.map((p) => `- ${p.id}: ${pm.get(p.productId)?.title_en ?? p.productId} (product ${p.productId})`);
+  return [
+    `Room: ${cm(room.shell.width)} × ${cm(room.shell.depth)} cm, ceiling ${cm(room.shell.height)} cm (${((room.shell.width * room.shell.depth) / 3.3058).toFixed(1)} ping). ${doors.join("; ")}.`,
+    `Style: ${room.finishes?.style ?? "unknown"}; walls ${room.finishes?.wall}, floor ${room.finishes?.floor_material}.`,
+    `Existing furniture:\n${objs.join("\n")}`,
+    placed.length ? `Placed products:\n${placed.join("\n")}` : "No products placed yet.",
+    `Shopping list: ${state.list.length ? state.list.join(", ") : "empty"}. Taste: ${JSON.stringify(state.taste)}.`,
+  ].join("\n");
+}
+
+const SYSTEM = (lang: string, room: string) => `You are Roomie, a friendly personal AI shopping assistant for renters in Taiwan.
+The user filmed their room; it is measured and shown in 3D next to this chat. Help them find real Shopee Taiwan products that fit, place them in the 3D room, show realistic photos, and build a shopping list.
+Rules:
+- Act with tools instead of asking questions. Ask at most one short question, and only when you can't act at all (for example no budget hint and they asked for "the best"). Never ask the user to measure anything; sizes marked approx are fine as they are.
+- To recommend: search_products, pick the best 1-3 for this room and taste, then show_products. Place an item with place_item when the user picks one or clearly asks to put something in the room.
+- Fit results come from code. Never claim something fits unless a tool said so. Mention approx sizes briefly when relevant.
+- Product data is in Chinese; reply in ${lang === "zh" ? "Traditional Chinese (zh-TW)" : "English"}, whatever language the product titles are in. Prices in NT$.
+- Keep replies short: 1-3 sentences. The cards show the details.
+${room}`;
+
+export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  const body = await request.json<{ roomId: string; lang: "zh" | "en"; messages: ChatTurn[]; state: RoomState }>();
+  if (!(await underLimit(env, request, "chat", 50, 1500))) return json({ error: "busy" }, 429);
+  const [room, catalog] = await Promise.all([loadRoom(env, request, body.roomId), loadCatalog(env, request)]);
+  const pm = productMap(catalog);
+  const state: RoomState = structuredClone(body.state);
+  const cards: Card[] = [];
+  const objectById = (id?: string) => room.objects.find((o) => o.id === id);
+  // Desk lamps go on the desk unless the user said otherwise.
+  const nearFor = (productId: string, id?: string) =>
+    objectById(id) ?? (pm.get(productId)?.category === "lamp" ? room.objects.find((o) => o.label === "desk" && !state.removed.includes(o.id)) : undefined);
+
+  const run: Record<string, (a: any) => unknown> = {
+    search_products: (a) => {
+      const q = String(a.query ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+      return catalog
+        .filter((p) => (!a.category || a.category === "any" || p.category === a.category || (a.category === "lamp" && p.category === "floor lamp")))
+        .filter((p) => (!a.max_price || p.price <= a.max_price))
+        .filter((p) => !p.size || ((!a.max_width_cm || p.size.w * 100 <= a.max_width_cm) && (!a.max_depth_cm || p.size.d * 100 <= a.max_depth_cm) && (!a.max_height_cm || p.size.h * 100 <= a.max_height_cm)))
+        .map((p) => ({ p, score: q.filter((w) => (p.title + " " + (p.title_en ?? "") + " " + p.category).toLowerCase().includes(w)).length + Math.log10((p.sold ?? 1) + 1) / 4 }))
+        .sort((x, y) => y.score - x.score).slice(0, 8)
+        .map(({ p }) => ({ id: p.id, name: p.title_en, price: p.price, size_cm: p.size && `${cm(p.size.w)}×${cm(p.size.d)}×${cm(p.size.h)}`, size_source: p.size_source, category: p.category, color: p.color, sold: p.sold }));
+    },
+    show_products: (a) => {
+      const items = (a.product_ids as string[]).map((id) => pm.get(id)).filter(Boolean).slice(0, 3).map((product) => {
+        const spot = findSpot(room, state, pm, product!.id, nearFor(product!.id, a.near_object_id));
+        return { product: product!, fit: spot ? checkFit(room, state, pm, spot) : { status: "no" as const, clearance_cm: null, reason_en: "No free spot found", reason_zh: "房間裡找不到空位" } };
+      });
+      cards.push({ type: "products", title: a.title, items });
+      return items.map((i) => ({ id: i.product.id, fit: i.fit.status, reason: i.fit.reason_en }));
+    },
+    place_item: (a) => {
+      const replaced = objectById(a.replace_object_id);
+      if (replaced) state.removed.push(replaced.id);
+      let spot: Placement | null = null;
+      const pr = pm.get(a.product_id);
+      if (!pr) return { error: "unknown product" };
+      if (replaced && pr.size) spot = { id: `p${Date.now().toString(36)}`, productId: pr.id, x: replaced.center[0], z: replaced.center[2], yaw: replaced.yaw };
+      spot = spot && checkFit(room, state, pm, spot).status !== "no" ? spot : findSpot(room, state, pm, a.product_id, nearFor(a.product_id, a.near_object_id));
+      if (!spot) return { error: "no free spot in the room" };
+      state.placements.push(spot);
+      const fit = checkFit(room, state, pm, spot);
+      cards.push({ type: "products", items: [{ product: pr, fit, placementId: spot.id }] });
+      return { placement_id: spot.id, fit: fit.status, reason: fit.reason_en };
+    },
+    move_item: (a) => {
+      const i = state.placements.findIndex((p) => p.id === a.placement_id);
+      if (i < 0) return { error: "unknown placement" };
+      const [old] = state.placements.splice(i, 1);
+      const spot = findSpot(room, state, pm, old.productId, objectById(a.near_object_id));
+      state.placements.push(spot ? { ...spot, id: old.id } : old);
+      return spot ? { moved: true, fit: checkFit(room, state, pm, { ...spot, id: old.id }).reason_en } : { moved: false, reason: "no free spot there" };
+    },
+    remove_item: (a) => {
+      if (a.placement_id) state.placements = state.placements.filter((p) => p.id !== a.placement_id);
+      if (a.object_id && objectById(a.object_id)) state.removed.push(a.object_id);
+      return { ok: true };
+    },
+    update_object_size: (a) => {
+      const o = objectById(a.object_id);
+      if (!o) return { error: "unknown object" };
+      const s = state.sizeEdits[o.id] ?? o.size;
+      state.sizeEdits[o.id] = { w: a.w_cm ? a.w_cm / 100 : s.w, d: a.d_cm ? a.d_cm / 100 : s.d, h: a.h_cm ? a.h_cm / 100 : s.h };
+      return { ok: true, size: state.sizeEdits[o.id] };
+    },
+    set_taste: (a) => ((state.taste = { ...state.taste, ...a }), { ok: true }),
+    add_to_list: (a) => {
+      for (const id of a.product_ids as string[]) if (pm.has(id) && !state.list.includes(id)) state.list.push(id);
+      return { list: state.list };
+    },
+    show_list: () => (cards.push({ type: "list" }), { shown: true }),
+    render_photo: (a) => {
+      const p = state.placements.find((x) => x.id === a.placement_id);
+      if (!p) return { error: "unknown placement" };
+      cards.push({ type: "photo", placementId: p.id, productId: p.productId });
+      return { started: true };
+    },
+  };
+
+  const history = body.messages.slice(-12).map((m) => m.role === "user"
+    ? { role: "user", content: m.image ? [{ type: "text", text: m.text || "(photo)" }, { type: "image_url", image_url: { url: m.image } }] : m.text }
+    : { role: "assistant", content: m.text });
+  const messages: any[] = [{ role: "system", content: SYSTEM(body.lang, describeRoom(room, state, pm)) }, ...history];
+  try {
+    for (let step = 0; step < MAX_STEPS; step++) {
+      const r = await meta(env, "/chat/completions", { model: MODEL, reasoning_effort: "low", messages, tools });
+      const msg = r.choices[0].message;
+      messages.push(msg);
+      if (!msg.tool_calls?.length) return json({ reply: msg.content ?? "", state, cards });
+      for (const call of msg.tool_calls) {
+        let result: unknown;
+        try {
+          result = run[call.function.name]?.(JSON.parse(call.function.arguments || "{}")) ?? { error: "unknown tool" };
+        } catch (e: any) {
+          result = { error: e.message };
+        }
+        messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
+      }
+    }
+    return json({ reply: "", state, cards });
+  } catch (e: any) {
+    return json({ error: String(e.message ?? e) }, 502);
+  }
+};

@@ -1,0 +1,59 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ARKit-only room view</title>
+<style>
+  #box{position:relative;background:#111;border-radius:var(--radius,10px);overflow:hidden;color:#eee;font:13px system-ui,sans-serif}
+  canvas{display:block;width:100%;height:560px;cursor:grab;touch-action:none}
+  #info{position:absolute;top:10px;left:10px;background:#000a;padding:8px 10px;border-radius:8px;max-width:340px;line-height:1.45}
+  .k{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+</style></head><body>
+<div id="box"><canvas id="c"></canvas>
+<div id="info"><b>ARKit only: what the phone measured</b><br>
+Drag to rotate · scroll to zoom · shift-drag to pan<br>
+Dots: 3D points ARKit tracked, coloured from your video<br>
+<span class="k" style="background:#3c8"></span>floor <span class="k" style="background:#c84"></span>table / seat
+<span class="k" style="background:#48c"></span>wall <span class="k" style="background:#c4c"></span>window/door
+<span class="k" style="background:#999"></span>unclassified<br>
+<span class="k" style="background:#ff0"></span>your walking path · <span class="k" style="background:#0069e0"></span>objects measured with SAM + Muse</div></div>
+<script>
+const D = __DATA__;
+D.pts = Array.from({length: D.pts.length/3}, (_, i) => [D.pts[3*i]/100, D.pts[3*i+1]/100, D.pts[3*i+2]/100]);
+D.cols = Array.from({length: D.pts.length}, (_, i) => [0,2,4].map(k => parseInt(D.cols.substr(6*i+k, 2), 16)));
+const cv = document.getElementById('c'), g = cv.getContext('2d');
+const col = {floor:'#33cc88',table:'#cc8844',seat:'#cc8844',wall:'#4488cc',window:'#cc44cc',door:'#cc44cc',none:'#999999'}; // 6-digit hex: an alpha suffix is appended below
+// centre on the point cloud, floor at y=0
+const n = D.pts.length; let cx=0,cz=0; for (const p of D.pts){cx+=p[0];cz+=p[2]} cx/=n; cz/=n;
+const T = p => [p[0]-cx, p[1]-D.floorY, p[2]-cz];
+let yaw=0.8, pitch=0.5, dist=6, panX=0, panY=-0.8, drag=null;
+function proj(p){ let [x,y,z]=T(p); y+=panY;
+  let X= x*Math.cos(yaw)-z*Math.sin(yaw), Z= x*Math.sin(yaw)+z*Math.cos(yaw);
+  let Y= y*Math.cos(pitch)-Z*Math.sin(pitch); Z= y*Math.sin(pitch)+Z*Math.cos(pitch);
+  Z+=dist; if (Z<0.1) return null; const f=Math.min(cv.width,cv.height)*0.9;
+  return [cv.width/2+f*(X+panX)/Z, cv.height/2-f*Y/Z, Z]; }
+function draw(){ cv.width=cv.clientWidth*devicePixelRatio; cv.height=cv.clientHeight*devicePixelRatio;
+  g.clearRect(0,0,cv.width,cv.height);
+  for (const pl of D.planes){ const q=pl.pts.map(proj); if(q.some(v=>!v)) continue;
+    g.beginPath(); q.forEach((v,i)=>i?g.lineTo(v[0],v[1]):g.moveTo(v[0],v[1])); g.closePath();
+    g.fillStyle=(col[pl.cls]||'#999999')+'44'; g.strokeStyle=col[pl.cls]||'#999999'; g.lineWidth=devicePixelRatio; g.fill(); g.stroke();
+    const m=q.reduce((a,v)=>[a[0]+v[0]/q.length,a[1]+v[1]/q.length],[0,0]);
+    g.fillStyle='#fff'; g.font=`${11*devicePixelRatio}px system-ui`; g.fillText(pl.label,m[0],m[1]); }
+  const s=2*devicePixelRatio;
+  for (let i=0;i<n;i++){ const v=proj(D.pts[i]); if(!v) continue; const c=D.cols[i];
+    g.fillStyle=`rgb(${c[0]},${c[1]},${c[2]})`; g.fillRect(v[0]-s/2,v[1]-s/2,s,s); }
+  // measured objects: 8 corners (bottom 4, top 4), 12 edges, label at the top centre
+  for (const bx of D.boxes || []){ const q=bx.c.map(proj); if(q.some(v=>!v)) continue;
+    g.strokeStyle='#0069e0'; g.lineWidth=2*devicePixelRatio; g.beginPath();
+    for (const [i,j] of [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]]){ g.moveTo(q[i][0],q[i][1]); g.lineTo(q[j][0],q[j][1]); }
+    g.stroke(); const m=q.slice(4).reduce((a,v)=>[a[0]+v[0]/4,a[1]+v[1]/4],[0,0]);
+    g.font=`bold ${12*devicePixelRatio}px system-ui`; const w=g.measureText(bx.label).width;
+    g.fillStyle='#0069e0'; g.fillRect(m[0]-w/2-4*devicePixelRatio,m[1]-16*devicePixelRatio,w+8*devicePixelRatio,20*devicePixelRatio);
+    g.fillStyle='#fff'; g.fillText(bx.label,m[0]-w/2,m[1]); }
+  g.strokeStyle='#ff0'; g.lineWidth=2*devicePixelRatio; g.beginPath();
+  D.path.forEach((p,i)=>{const v=proj(p); if(v) i?g.lineTo(v[0],v[1]):g.moveTo(v[0],v[1])}); g.stroke(); }
+cv.onpointerdown=e=>{drag={x:e.clientX,y:e.clientY,shift:e.shiftKey}; cv.setPointerCapture(e.pointerId)};
+cv.onpointermove=e=>{ if(!drag) return; const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.x=e.clientX; drag.y=e.clientY;
+  if(drag.shift){panX+=dx*0.004*dist/6; panY-=dy*0.004*dist/6} else {yaw+=dx*0.01; pitch=Math.max(-1.5,Math.min(1.5,pitch+dy*0.01))} draw()};
+cv.onpointerup=()=>drag=null;
+cv.onwheel=e=>{e.preventDefault(); dist=Math.max(1,Math.min(20,dist*(1+e.deltaY*0.001))); draw()};
+addEventListener('resize',draw); draw();
+</script></body></html>
