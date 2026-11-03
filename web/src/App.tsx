@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Chat, ShoppingList, freshPhotos } from "./components/Chat";
+import { Chat, ShoppingList, freshPhotos, photoKey } from "./components/Chat";
 import { RoomViewer, type ViewMode } from "./components/RoomViewer";
 import { MeasureChip, dims } from "./components/bits";
 import { findSpot, productMap } from "./lib/fit";
@@ -88,7 +88,7 @@ function RoomPage({ id }: { id: string }) {
       if (!spot) return;
       setState({ ...state, placements: [...state.placements, spot] });
       setSelected(spot.id);
-      freshPhotos.add(spot.id);
+      freshPhotos.add(photoKey(spot));
       setTurns([...turns, { role: "assistant", text: "", cards: [{ type: "photo", placementId: spot.id, productId: spot.productId }] }]);
     };
     window.addEventListener("roomie:place", h);

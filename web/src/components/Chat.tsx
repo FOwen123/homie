@@ -40,7 +40,10 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
       setState(j.state);
       const placed = j.state.placements.at(-1) as Placement | undefined;
       if (placed && placed.id !== state.placements.at(-1)?.id) onFocus(placed.id);
-      for (const c of j.cards as Card[]) if (c.type === "photo") freshPhotos.add(c.placementId);
+      for (const c of j.cards as Card[]) {
+        const p = c.type === "photo" && (j.state as RoomState).placements.find((x) => x.id === c.placementId);
+        if (p) freshPhotos.add(photoKey(p));
+      }
       setTurns([...next, { role: "assistant", text: j.reply, cards: j.cards }]);
     } catch (e: any) {
       setTurns([...next, { role: "assistant", text: e.message }]);
@@ -117,14 +120,17 @@ function CardView({ card, roomId, room, state, setState, products, onFocus }: { 
 // result, and show a button (not an automatic call) for photo cards restored from saved chat history.
 type Photo = { image?: string; frame?: string; error?: string };
 const photoCache = new Map<string, Photo>();
-export const freshPhotos = new Set<string>();
+export const freshPhotos = new Set<string>(); // photo keys requested in this visit
+/** A moved product needs a new photo, so the key includes where it stands. */
+export const photoKey = (p: Placement) => `${p.id}@${p.x.toFixed(2)},${(p.y ?? 0).toFixed(2)},${p.z.toFixed(2)},${p.yaw.toFixed(2)}`;
 
 export function PhotoCard({ roomId, placement }: { roomId: string; placement?: Placement }) {
   const t = useT();
-  const id = placement?.id ?? "";
+  const id = placement ? photoKey(placement) : "";
   const [img, setImg] = useState<Photo | null>(photoCache.get(id) ?? null);
   const [want, setWant] = useState(freshPhotos.has(id));
   const [before, setBefore] = useState(false);
+  useEffect(() => { setImg(photoCache.get(id) ?? null); setWant(freshPhotos.has(id)); }, [id]);
   useEffect(() => {
     if (!placement || !want || photoCache.has(id)) return;
     let live = true;

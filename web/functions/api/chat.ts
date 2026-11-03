@@ -6,7 +6,9 @@ import type { Card, ChatTurn, Placement, Product, Room, RoomState } from "../../
 import { type Env, json, loadCatalog, loadRoom, meta, underLimit } from "../_lib";
 
 const MODEL = "muse-spark-1.3"; // standard mode: visitors' chats and photos stay out of model training
-const MAX_STEPS = 6;
+const MAX_STEPS = 5;
+const MAX_BODY = 1_500_000; // the client shrinks photos to ~768 px JPEG, well under this
+const MAX_OUT = 800; // output tokens per model call
 
 const tools = [
   fn("search_products", "Search the cached Shopee Taiwan catalog. Returns up to 8 products with price, size and category.", {
@@ -71,8 +73,24 @@ Rules:
 ${room}`;
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
-  const body = await request.json<{ roomId: string; lang: "zh" | "en"; messages: ChatTurn[]; state: RoomState }>();
-  if (!(await underLimit(env, request, "chat", 50, 1500))) return json({ error: "busy" }, 429);
+  // Bound what one request can cost: body size, history, text, images and the state we put in the prompt.
+  if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY) return json({ error: "too large" }, 413);
+  const raw = await request.text();
+  if (raw.length > MAX_BODY) return json({ error: "too large" }, 413);
+  const body = JSON.parse(raw) as { roomId: string; lang: "zh" | "en"; messages: ChatTurn[]; state: RoomState };
+  if (!Array.isArray(body.messages) || !body.state) return json({ error: "bad request" }, 400);
+  if (!(await underLimit(env, request, "chat", 40, 600))) return json({ error: "busy" }, 429);
+  body.messages = body.messages.slice(-8).map((m, i, all) => ({
+    role: m.role === "assistant" ? "assistant" : "user", text: String(m.text ?? "").slice(0, 1500),
+    image: i === all.length - 1 && typeof m.image === "string" && m.image.startsWith("data:image/") ? m.image : undefined, // only the newest photo
+  }));
+  const st = body.state;
+  body.state = {
+    placements: (st.placements ?? []).slice(0, 20), removed: (st.removed ?? []).slice(0, 40).map(String),
+    sizeEdits: Object.fromEntries(Object.entries(st.sizeEdits ?? {}).slice(0, 40)),
+    taste: { style: String(st.taste?.style ?? "").slice(0, 200) || undefined, budget: Number(st.taste?.budget) || undefined, notes: String(st.taste?.notes ?? "").slice(0, 300) || undefined },
+    list: (st.list ?? []).slice(0, 50).map(String),
+  };
   const [room, catalog] = await Promise.all([loadRoom(env, request, body.roomId), loadCatalog(env, request)]);
   const pm = productMap(catalog);
   const state: RoomState = structuredClone(body.state);
@@ -103,13 +121,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     },
     place_item: (a) => {
       const replaced = objectById(a.replace_object_id);
-      if (replaced) state.removed.push(replaced.id);
-      let spot: Placement | null = null;
       const pr = pm.get(a.product_id);
       if (!pr) return { error: "unknown product" };
-      if (replaced && pr.size) spot = { id: `p${Date.now().toString(36)}`, productId: pr.id, x: replaced.center[0], z: replaced.center[2], yaw: replaced.yaw };
-      spot = spot && checkFit(room, state, pm, spot).status !== "no" ? spot : findSpot(room, state, pm, a.product_id, nearFor(a.product_id, a.near_object_id));
+      // Try with the replaced object hidden, but only keep it hidden if the new product actually fits.
+      const trial: RoomState = replaced ? { ...state, removed: [...state.removed, replaced.id] } : state;
+      let spot: Placement | null = replaced && pr.size ? { id: `p${Date.now().toString(36)}`, productId: pr.id, x: replaced.center[0], z: replaced.center[2], yaw: replaced.yaw } : null;
+      spot = spot && checkFit(room, trial, pm, spot).status !== "no" ? spot : findSpot(room, trial, pm, a.product_id, nearFor(a.product_id, a.near_object_id));
       if (!spot) return { error: "no free spot in the room" };
+      if (replaced) state.removed.push(replaced.id);
       state.placements.push(spot);
       const fit = checkFit(room, state, pm, spot);
       cards.push({ type: "products", items: [{ product: pr, fit, placementId: spot.id }] });
@@ -155,7 +174,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const messages: any[] = [{ role: "system", content: SYSTEM(body.lang, describeRoom(room, state, pm)) }, ...history];
   try {
     for (let step = 0; step < MAX_STEPS; step++) {
-      const r = await meta(env, "/chat/completions", { model: MODEL, reasoning_effort: "low", messages, tools });
+      const r = await meta(env, "/chat/completions", { model: MODEL, reasoning_effort: "low", messages, tools, max_tokens: MAX_OUT });
       const msg = r.choices[0].message;
       messages.push(msg);
       if (!msg.tool_calls?.length) return json({ reply: msg.content ?? "", state, cards });

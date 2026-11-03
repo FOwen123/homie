@@ -60,17 +60,19 @@ Bun.serve({
     if (req.headers.get("x-roomie-token") !== TOKEN) return new Response("unauthorized", { status: 401 });
     const url = new URL(req.url);
     if (req.method === "POST" && url.pathname === "/upload") {
-      const n = perDay.get(today()) ?? 0;
+      const day = today(), n = perDay.get(day) ?? 0;
       if (n >= DAILY_MAX) return Response.json({ error: "busy" }, { status: 429 });
-      const form = await req.formData();
+      perDay.set(day, n + 1); // reserve the slot before the first await so concurrent uploads can't share it
+      const release = () => perDay.set(day, (perDay.get(day) ?? 1) - 1);
+      const form = await req.formData().catch(() => null);
+      if (!form) return release(), Response.json({ error: "bad upload" }, { status: 400 });
       const id = `r${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
       await mkdir(join(UPLOADS, id), { recursive: true });
       for (const name of FILES) {
         const f = form.get(name);
-        if (!(f instanceof File)) return Response.json({ error: `missing ${name}` }, { status: 400 });
+        if (!(f instanceof File)) return release(), Response.json({ error: `missing ${name}` }, { status: 400 });
         await Bun.write(join(UPLOADS, id, name), f);
       }
-      perDay.set(today(), n + 1);
       jobs.set(id, { state: "queued" });
       queue.push(id);
       void work();

@@ -47,7 +47,7 @@ async function toDataUrl(res: Response) {
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const { roomId, placement } = await request.json<{ roomId: string; placement: Placement }>();
-  if (!(await underLimit(env, request, "photo", 10, 200))) return json({ error: "busy" }, 429);
+  if (!(await underLimit(env, request, "photo", 8, 120))) return json({ error: "busy" }, 429);
   const [room, catalog] = await Promise.all([loadRoom(env, request, roomId), loadCatalog(env, request)]);
   const pr = catalog.find((p) => p.id === placement.productId);
   if (!pr?.size) return json({ error: "unknown product" }, 400);

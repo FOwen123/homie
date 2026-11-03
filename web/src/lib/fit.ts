@@ -61,10 +61,10 @@ function doorZones(room: Room): Box[] {
 function entryCheck(room: Room, size: Size): FitResult | null {
   const door = room.shell.walls.flatMap((w) => w.openings).find((o) => o.type === "door");
   if (!door) return null;
-  const dw = door.to - door.from, dh = door.top - door.bottom;
+  const [d1, d2] = [door.to - door.from, door.top - door.bottom].sort((p, q) => p - q);
   const [a, b] = [size.w, size.d, size.h].sort((p, q) => p - q); // carried in on its two smallest sides
-  if (a > dw && a > dh) return { status: "no", clearance_cm: null, reason_en: `Too big for your ${Math.round(dw * 100)} cm door`, reason_zh: `比門寬 ${Math.round(dw * 100)} cm 還大，搬不進來` };
-  if (b > dh) return { status: "check", clearance_cm: null, reason_en: "Tight through the door, may need assembly inside", reason_zh: "進門很勉強，可能要在室內組裝" };
+  if (a > d1 || b > d2) return { status: "no", clearance_cm: null, reason_en: `Won't go through your ${Math.round(d1 * 100)} cm door`, reason_zh: `${Math.round(d1 * 100)} cm 的門搬不進來` };
+  if (a > d1 - 0.03 || b > d2 - 0.03) return { status: "check", clearance_cm: null, reason_en: "Tight through the door", reason_zh: "進門很勉強" };
   return null;
 }
 
@@ -110,8 +110,9 @@ export function findSpot(room: Room, state: RoomState, products: Map<string, Pro
   const pr = products.get(productId);
   if (!pr?.size) return null;
   const id = `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
-  if (near && ON_TOP.has(pr.category) && near.size.w > pr.size.w && near.size.d > pr.size.d) {
-    const top = near.center[1] + near.size.h / 2;
+  const ns = near && (state.sizeEdits[near.id] ?? near.size); // the user's corrected size wins
+  if (near && ns && ON_TOP.has(pr.category) && ns.w > pr.size.w && ns.d > pr.size.d) {
+    const top = Math.max(0, near.center[1] - near.size.h / 2) + ns.h;
     const cand = { id, productId, x: near.center[0], z: near.center[2], y: top, yaw: near.yaw };
     if (checkFit(room, state, products, cand).status !== "no") return cand;
   }
