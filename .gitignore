@@ -1,4 +1,4 @@
-ios/RoomCapture.xcodeproj/
+ios/*.xcodeproj/
 ios/RoomCapture/Info.plist
 ios/build/
 .DS_Store
@@ -11,3 +11,8 @@ out/
 node_modules/
 pipeline/spend.jsonl
 pipeline/catalog/
+pipeline/uploads/
+# Visitors' uploaded rooms are published to the site but never committed (the repo is public).
+web/public/rooms/*
+!web/public/rooms/demo/
+.wrangler/

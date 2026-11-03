@@ -26,7 +26,7 @@ export const loadRoom = (env: Env, req: Request, id: string) => {
 export const loadCatalog = (env: Env, req: Request) => asset<Product[]>(env, req, "/catalog.json");
 
 /** Daily counters per visitor and overall, so public use can't drain the Meta credits. */
-export async function underLimit(env: Env, req: Request, kind: "chat" | "photo", perIp: number, total: number) {
+export async function underLimit(env: Env, req: Request, kind: "chat" | "photo" | "upload", perIp: number, total: number) {
   if (!env.LIMITS) return true; // local dev without KV
   const day = new Date().toISOString().slice(0, 10);
   const ip = req.headers.get("cf-connecting-ip") ?? "local";

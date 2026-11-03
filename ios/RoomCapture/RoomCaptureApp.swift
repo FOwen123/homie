@@ -11,7 +11,21 @@ struct RoomCaptureApp: App {
 
 struct CaptureView: View {
     @StateObject private var recorder = Recorder()
+    @StateObject private var uploader = Uploader()
     @State private var sharing = false
+    @Environment(\.openURL) private var openURL
+
+    @ViewBuilder private var uploadStatus: some View {
+        switch uploader.phase {
+        case .idle: if recorder.lastCapture != nil { Button("Share files") { sharing = true }.font(.footnote).foregroundStyle(.white) }
+        case .uploading: Label("Uploading your room…", systemImage: "arrow.up.circle").statusPill()
+        case .processing(let step): Label(step, systemImage: "gearshape.2").statusPill()
+        case .done(let url):
+            Button { openURL(url) } label: { Label("Open my room", systemImage: "cube.transparent") }
+                .font(.headline).padding(.horizontal, 20).frame(height: 48).background(.white, in: Capsule()).foregroundStyle(.black)
+        case .failed(let why): Label(why, systemImage: "exclamationmark.triangle").statusPill()
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -36,12 +50,14 @@ struct CaptureView: View {
                     .background(recorder.isRecording ? Color.red : Color.white, in: Capsule())
                     .foregroundStyle(recorder.isRecording ? .white : .black)
 
-                    if recorder.lastCapture != nil && !recorder.isRecording {
-                        Button("Share") { sharing = true }
-                            .font(.title3.bold()).frame(width: 100, height: 56)
-                            .background(.blue, in: Capsule()).foregroundStyle(.white)
+                    if let capture = recorder.lastCapture, !recorder.isRecording {
+                        Button("Upload") { uploader.upload(capture) }
+                            .font(.title3.bold()).frame(width: 120, height: 56)
+                            .background(Color(red: 0, green: 0.41, blue: 0.88), in: Capsule()).foregroundStyle(.white)
+                            .disabled(uploader.phase == .uploading)
                     }
                 }
+                uploadStatus
                 .padding(.bottom, 24)
             }
             .padding()
@@ -96,4 +112,11 @@ struct ShareSheet: UIViewControllerRepresentable {
         UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+}
+
+extension View {
+    func statusPill() -> some View {
+        font(.footnote).foregroundStyle(.white).padding(.horizontal, 14).padding(.vertical, 10)
+            .background(.black.opacity(0.6), in: Capsule())
+    }
 }

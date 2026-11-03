@@ -145,7 +145,7 @@ final class Recorder: NSObject, ObservableObject, ARSessionDelegate {
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: CVPixelBufferGetWidth(buffer),
             AVVideoHeightKey: CVPixelBufferGetHeight(buffer),
-            AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: 20_000_000],
+            AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: 8_000_000], // ~60 MB per 60 s: under the 100 MB upload limit
         ]
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
         input.expectsMediaDataInRealTime = true
