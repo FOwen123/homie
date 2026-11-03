@@ -1,0 +1,15 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "room-eval",
+      "dependencies": {
+        "@meta-sam/parser": "^0.1.0",
+      },
+    },
+  },
+  "packages": {
+    "@meta-sam/parser": ["@meta-sam/parser@0.1.0", "", {}, "sha512-099xq4EhULxm7gV+kEllQ9WTaNgwYumGRvCX5WAT2bny/SEh+U9tVT9bAzN1mISOC7TO6mgOt3MJmZ2Mv2RTmw=="],
+  }
+}

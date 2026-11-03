@@ -1,0 +1,9 @@
+# Cloudflare Pages project for the Roomie website + API functions (web/functions).
+name = "roomie"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-11-01"
+
+# Daily usage counters so public visitors can't drain the Meta credits (functions/_lib.ts underLimit).
+[[kv_namespaces]]
+binding = "LIMITS"
+id = "e887d89473a542d1a3a32863a41d31f2"

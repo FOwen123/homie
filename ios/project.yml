@@ -1,0 +1,31 @@
+name: Roomie
+options:
+  bundleIdPrefix: com.owen
+  deploymentTarget:
+    iOS: "18.0"
+settings:
+  base:
+    DEVELOPMENT_TEAM: K4QRW8Q4BW
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  Roomie:
+    type: application
+    platform: iOS
+    sources: [RoomCapture]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.owen.roomie
+    info:
+      path: RoomCapture/Info.plist
+      properties:
+        CFBundleDisplayName: Roomie
+        NSCameraUsageDescription: Records a walk-around of your room with camera positions so sizes can be measured.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UILaunchScreen: {}
+        UIRequiredDeviceCapabilities: [arkit]
+        ITSAppUsesNonExemptEncryption: false
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]

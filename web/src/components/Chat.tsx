@@ -1,0 +1,179 @@
+import { useEffect, useRef, useState } from "react";
+import { checkFit } from "../lib/fit";
+import { LangContext, useLang, useT } from "../lib/i18n";
+import type { Card, ChatTurn, Placement, Product, Room, RoomState } from "../lib/types";
+import { ProductCard, ntd } from "./bits";
+
+type Props = {
+  roomId: string; room: Room; state: RoomState; setState: (s: RoomState) => void; products: Map<string, Product>;
+  turns: ChatTurn[]; setTurns: (t: ChatTurn[]) => void; onFocus: (id: string) => void;
+};
+
+async function shrink(file: File): Promise<string> {
+  const img = await createImageBitmap(file);
+  const s = Math.min(1, 768 / Math.max(img.width, img.height));
+  const c = new OffscreenCanvas(Math.round(img.width * s), Math.round(img.height * s));
+  c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+  const blob = await c.convertToBlob({ type: "image/jpeg", quality: 0.82 });
+  return await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result as string); fr.readAsDataURL(blob); });
+}
+
+export function Chat({ roomId, room, state, setState, products, turns, setTurns, onFocus }: Props) {
+  const t = useT();
+  const { lang } = useLang();
+  const [text, setText] = useState("");
+  const [image, setImage] = useState<string | undefined>();
+  const [busy, setBusy] = useState(false);
+  const end = useRef<HTMLDivElement>(null);
+  useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [turns, busy]);
+
+  async function send(msg: string, img = image) {
+    if (!msg.trim() && !img) return;
+    const next = [...turns, { role: "user" as const, text: msg.trim(), image: img }];
+    setTurns(next);
+    setText(""); setImage(undefined); setBusy(true);
+    try {
+      const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId, lang, messages: next.map(({ role, text, image }) => ({ role, text, image })), state }) });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error === "busy" ? t("busy") : j.error);
+      setState(j.state);
+      const placed = j.state.placements.at(-1) as Placement | undefined;
+      if (placed && placed.id !== state.placements.at(-1)?.id) onFocus(placed.id);
+      for (const c of j.cards as Card[]) {
+        const p = c.type === "photo" && (j.state as RoomState).placements.find((x) => x.id === c.placementId);
+        if (p) freshPhotos.add(photoKey(p));
+      }
+      setTurns([...next, { role: "assistant", text: j.reply, cards: j.cards }]);
+    } catch (e: any) {
+      setTurns([...next, { role: "assistant", text: e.message }]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex-1 space-y-3 overflow-y-auto px-4 pt-4 pb-2">
+        {turns.map((m, i) => (
+          <div key={i} className="rise space-y-3">
+            {(m.text || m.image) && (
+              <div className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[85%] rounded-[24px] px-4 py-3 text-[17px] leading-[1.45] ${m.role === "user" ? "rounded-br-lg bg-mist-gray" : "rounded-bl-lg bg-bone-white"}`}>
+                  {m.image && <img src={m.image} alt="" className="mb-2 max-h-48 rounded-2xl" />}
+                  {m.text}
+                </div>
+              </div>
+            )}
+            {m.cards?.map((c, j) => <CardView key={j} card={c} {...{ roomId, room, state, setState, products, onFocus }} />)}
+          </div>
+        ))}
+        {busy && <div className="flex items-center gap-2 text-[15px] text-fog"><span className="pulse-dot h-2 w-2 rounded-full bg-powder-blue" />{t("thinking")}</div>}
+        {turns.length <= 1 && !busy && (
+          <div className="flex flex-wrap gap-2">
+            {(["quick1", "quick2", "quick3"] as const).map((k) => (
+              <button key={k} onClick={() => send(t(k))} className="min-h-11 rounded-full bg-bone-white px-4 text-[15px]">{t(k)}</button>
+            ))}
+          </div>
+        )}
+        <div ref={end} />
+      </div>
+      <form onSubmit={(e) => { e.preventDefault(); void send(text); }} className="m-3 flex items-end gap-2 rounded-[28px] bg-paper-white p-2 shadow-float">
+        <label className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-full text-graphite" title="photo">
+          <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) setImage(await shrink(f)); e.target.value = ""; }} />
+          {image ? <img src={image} alt="" className="h-9 w-9 rounded-full object-cover" /> : <span aria-hidden>📷</span>}
+        </label>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={1} placeholder={t("chatPlaceholder")}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(text); } }}
+          className="max-h-32 min-h-11 flex-1 resize-none bg-transparent px-1 py-2.5 text-[17px] outline-none placeholder:text-fog" />
+        <button disabled={busy} className="h-11 shrink-0 rounded-full bg-charcoal px-4 text-[15px] text-paper-white shadow-button disabled:opacity-50">{t("send")}</button>
+      </form>
+    </div>
+  );
+}
+
+function CardView({ card, roomId, room, state, setState, products, onFocus }: { card: Card } & Omit<Props, "turns" | "setTurns">) {
+  const t = useT();
+  if (card.type === "products") {
+    return (
+      <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1">
+        {card.items.map(({ product, fit, placementId }) => {
+          const placement = state.placements.find((p) => p.id === placementId) ?? state.placements.find((p) => p.productId === product.id);
+          const liveFit = placement ? checkFit(room, state, products, placement) : fit;
+          return (
+            <ProductCard key={product.id} product={product} fit={liveFit} inList={state.list.includes(product.id)}
+              onAdd={() => setState({ ...state, list: [...state.list, product.id] })}
+              onShow={() => {
+                if (placement) return onFocus(placement.id);
+                window.dispatchEvent(new CustomEvent("roomie:place", { detail: product.id }));
+              }} />
+          );
+        })}
+      </div>
+    );
+  }
+  if (card.type === "photo") {
+    const placement = state.placements.find((p) => p.id === card.placementId);
+    // keyed by position: a moved product remounts the card, so it never shows (or fetches for) the old spot
+    return <PhotoCard key={placement ? photoKey(placement) : card.placementId} roomId={roomId} placement={placement} />;
+  }
+  return <ShoppingList state={state} setState={setState} products={products} t={t} />;
+}
+
+// Each AI photo costs a Muse Image call: generate only for photo cards created in this visit, cache the
+// result, and show a button (not an automatic call) for photo cards restored from saved chat history.
+type Photo = { image?: string; frame?: string; error?: string };
+const photoCache = new Map<string, Photo>();
+export const freshPhotos = new Set<string>(); // photo keys requested in this visit
+/** A moved product needs a new photo, so the key includes where it stands. */
+export const photoKey = (p: Placement) => `${p.id}@${p.x.toFixed(2)},${(p.y ?? 0).toFixed(2)},${p.z.toFixed(2)},${p.yaw.toFixed(2)}`;
+
+export function PhotoCard({ roomId, placement }: { roomId: string; placement?: Placement }) {
+  const t = useT();
+  const id = placement ? photoKey(placement) : "";
+  const [img, setImg] = useState<Photo | null>(photoCache.get(id) ?? null);
+  const [want, setWant] = useState(freshPhotos.has(id));
+  const [before, setBefore] = useState(false);
+  useEffect(() => {
+    if (!placement || !want || photoCache.has(id)) return;
+    let live = true;
+    fetch("/api/photo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roomId, placement }) })
+      .then((r) => r.json()).then((j: Photo) => { if (j.image) photoCache.set(id, j); if (live) setImg(j); })
+      .catch((e) => live && setImg({ error: String(e) }));
+    return () => { live = false; };
+  }, [roomId, id, want]);
+  if (!img && !want) return <button onClick={() => setWant(true)} className="min-h-11 rounded-full bg-charcoal px-4 text-[15px] text-paper-white shadow-button">{t("showMe")}</button>;
+  if (!img) return <div className="flex aspect-[3/4] w-full max-w-sm items-center justify-center rounded-[24px] bg-bone-white text-[15px] text-fog"><span className="pulse-dot mr-2 h-2 w-2 rounded-full bg-powder-blue" />{t("making")}</div>;
+  if (!img.image) return <p className="text-[15px] text-fog">{t("photoFailed")} {img.error === "busy" ? t("busy") : ""}</p>;
+  return (
+    <figure className="relative w-full max-w-sm overflow-hidden rounded-[24px]" onPointerDown={() => setBefore(true)} onPointerUp={() => setBefore(false)} onPointerLeave={() => setBefore(false)}>
+      <img src={before ? img.frame : img.image} alt="" className="w-full select-none" draggable={false} />
+      <figcaption className="absolute top-3 left-3 rounded-full bg-paper-white/90 px-3 py-1 text-[12px]">{before ? "Before" : t("aiPreview")} · hold to compare</figcaption>
+    </figure>
+  );
+}
+
+export function ShoppingList({ state, setState, products, t }: { state: RoomState; setState: (s: RoomState) => void; products: Map<string, Product>; t: ReturnType<typeof useT> }) {
+  const items = state.list.map((id) => products.get(id)).filter((p): p is Product => !!p);
+  const total = items.reduce((s, p) => s + p.price, 0);
+  if (!items.length) return <p className="rounded-[24px] bg-paper-white p-4 text-[15px] text-fog">{t("empty")}</p>;
+  return (
+    <div className="rounded-[24px] bg-paper-white p-4">
+      <h3 className="mb-2 text-[20px]">{t("list")}</h3>
+      {items.map((p) => (
+        <div key={p.id} className="flex items-center gap-3 border-b border-ink/6 py-2 last:border-0">
+          <img src={p.image} alt="" referrerPolicy="no-referrer" className="h-12 w-12 rounded-xl bg-mist-gray object-contain" />
+          <a href={p.url} target="_blank" rel="noreferrer" className="line-clamp-2 flex-1 text-[14px] text-ink underline decoration-iris/40">{p.title}</a>
+          <span className="num text-[15px]">{ntd(p.price)}</span>
+          <button onClick={() => setState({ ...state, list: state.list.filter((x) => x !== p.id) })} className="min-h-11 px-2 text-[13px] text-fog">{t("remove")}</button>
+        </div>
+      ))}
+      <div className="mt-3 flex items-baseline justify-between">
+        <span className="text-[15px] text-graphite">{t("total")}</span>
+        <span className="num font-display text-[24px]">{ntd(total)}</span>
+      </div>
+    </div>
+  );
+}
+
+export { LangContext };
