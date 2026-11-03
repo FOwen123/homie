@@ -40,7 +40,7 @@ bun pipeline/process.ts <capture_dir> web/public/rooms/<id>
 bun pipeline/server.ts
 ```
 
-Public use has daily limits (chat, photos, uploads) so nobody can drain the API credits. Uploaded rooms are published to the site but never committed.
+Public use has soft daily limits (chat, photos, uploads) and every chat request has a bounded size and output, so casual use can't drain the API credits. The limits are KV counters, not atomic: a burst of concurrent requests can pass a few extra; the real ceiling is the Meta account's credit. Uploaded rooms are published to the site but never committed.
 
 ## Limits, honestly
 

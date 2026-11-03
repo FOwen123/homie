@@ -112,7 +112,11 @@ function CardView({ card, roomId, room, state, setState, products, onFocus }: { 
       </div>
     );
   }
-  if (card.type === "photo") return <PhotoCard roomId={roomId} placement={state.placements.find((p) => p.id === card.placementId)} />;
+  if (card.type === "photo") {
+    const placement = state.placements.find((p) => p.id === card.placementId);
+    // keyed by position: a moved product remounts the card, so it never shows (or fetches for) the old spot
+    return <PhotoCard key={placement ? photoKey(placement) : card.placementId} roomId={roomId} placement={placement} />;
+  }
   return <ShoppingList state={state} setState={setState} products={products} t={t} />;
 }
 
@@ -130,7 +134,6 @@ export function PhotoCard({ roomId, placement }: { roomId: string; placement?: P
   const [img, setImg] = useState<Photo | null>(photoCache.get(id) ?? null);
   const [want, setWant] = useState(freshPhotos.has(id));
   const [before, setBefore] = useState(false);
-  useEffect(() => { setImg(photoCache.get(id) ?? null); setWant(freshPhotos.has(id)); }, [id]);
   useEffect(() => {
     if (!placement || !want || photoCache.has(id)) return;
     let live = true;

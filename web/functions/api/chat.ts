@@ -93,7 +93,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   };
   const [room, catalog] = await Promise.all([loadRoom(env, request, body.roomId), loadCatalog(env, request)]);
   const pm = productMap(catalog);
-  const state: RoomState = structuredClone(body.state);
+  // Keep only ids that exist in this room and catalog, so nothing client-made reaches the prompt unchecked.
+  const objIds = new Set(room.objects.map((o) => o.id));
+  const num = (v: unknown, lo: number, hi: number) => Math.min(hi, Math.max(lo, Number(v) || 0));
+  const st0 = body.state;
+  const state: RoomState = {
+    placements: st0.placements.filter((p) => typeof p?.id === "string" && p.id.length <= 40 && pm.has(p.productId))
+      .map((p) => ({ id: p.id, productId: p.productId, x: num(p.x, -10, 10), z: num(p.z, -10, 10), y: p.y === undefined ? undefined : num(p.y, 0, 3), yaw: num(p.yaw, -7, 7), accepted: !!p.accepted })),
+    removed: st0.removed.filter((id) => objIds.has(id)),
+    sizeEdits: Object.fromEntries(Object.entries(st0.sizeEdits).filter(([id]) => objIds.has(id))
+      .map(([id, s]) => [id, { w: num(s?.w, 0.05, 5), d: num(s?.d, 0.05, 5), h: num(s?.h, 0.01, 3) }])),
+    taste: st0.taste, list: st0.list.filter((id) => pm.has(id)),
+  };
   const cards: Card[] = [];
   const objectById = (id?: string) => room.objects.find((o) => o.id === id);
   // Desk lamps go on the desk unless the user said otherwise.
