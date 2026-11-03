@@ -25,6 +25,7 @@ await step("measure on ARKit planes", () => py("measure.py", capture, join(work,
 await step("room shell + objects", () => py("room.py", capture, join(work, "seg"), join(work, "kf"), join(work, "measure.json"), bundle));
 await cp(join(work, "kf"), join(bundle, "keyframes"), { recursive: true });
 await step("furniture parts + finishes (Muse)", () => $`bun ${join(import.meta.dir, "parts.ts")} ${bundle}`.quiet());
+await step("judge: blocks vs real frames (Muse)", () => $`bun ${join(import.meta.dir, "judge.ts")} ${bundle}`.quiet());
 if (!process.argv.includes("--no-splat")) {
   await step("splat dataset", () => $`uv run -q --with numpy python ${join(import.meta.dir, "splat_dataset.py")} ${capture} ${join(work, "splat_ds")} 10 960`.quiet());
   await step("splat fit (msplat)", () =>

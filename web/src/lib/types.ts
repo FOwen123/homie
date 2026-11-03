@@ -15,6 +15,7 @@ export type Room = {
   version: 1; shell: { width: number; depth: number; height: number; walls: Wall[] };
   objects: RoomObject[]; keyframes: Keyframe[]; world_to_room: number[][];
   finishes?: { wall: string; floor: string; ceiling: string; floor_material: string; style: string };
+  judge?: { model: string; views: number[]; rounds: { round: number; scores: number[]; fixes: number; kept: boolean }[]; final: number[] };
 };
 
 export type Product = {

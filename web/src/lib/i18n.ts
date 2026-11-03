@@ -36,6 +36,8 @@ const T = {
   quick1: { zh: "書桌旁放一盞燈", en: "A lamp by my desk" },
   quick2: { zh: "更多收納，3000 以內", en: "More storage under NT$3,000" },
   quick3: { zh: "幫我配一張地毯", en: "Find me a rug" },
+  aiChecked: { zh: "AI 檢查", en: "AI-checked" },
+  rounds: { zh: "輪", en: "rounds" },
   photoFailed: { zh: "這張照片沒有生成成功。", en: "That photo didn't come out." },
 } as const;
 

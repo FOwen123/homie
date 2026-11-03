@@ -110,6 +110,12 @@ function RoomPage({ id }: { id: string }) {
               <div className="pointer-events-auto rounded-full bg-paper-white/90 px-3 py-1.5 text-[13px]">
                 <a href="/" className="font-display">Roomie</a> · <span className="num">{(area / 3.3058).toFixed(1)} 坪 · {dims({ w: room.shell.width, d: room.shell.depth, h: room.shell.height })}</span>
               </div>
+              {room.judge && (
+                <div className="pointer-events-auto absolute top-14 left-3 rounded-full bg-paper-white/90 px-3 py-1 text-[12px] text-graphite"
+                  title={room.judge.rounds.map((r) => `round ${r.round}: ${r.scores.join(", ")}${r.kept ? "" : " (reverted)"}`).join("\n")}>
+                  {t("aiChecked")} <span className="num text-ink">{(room.judge.final.reduce((a, b) => a + b, 0) / room.judge.final.length).toFixed(1)}/10</span> · {room.judge.rounds.length} {t("rounds")}
+                </div>
+              )}
               <div className="pointer-events-auto"><LangToggle /></div>
             </div>
             {label && (obj || placed) && (
