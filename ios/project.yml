@@ -21,7 +21,7 @@ targets:
     info:
       path: RoomCapture/Info.plist
       properties:
-        CFBundleDisplayName: Roomie
+        CFBundleDisplayName: Homie
         NSCameraUsageDescription: Records a walk-around of your room with camera positions so sizes can be measured.
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true

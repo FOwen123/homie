@@ -1,4 +1,4 @@
-# Room engine plan (working name: Roomie TW)
+# Room engine plan (name: Homie)
 
 Status: planning. Last updated Wed 2026-11-04, 01:00 Taiwan time.
 Hackathon: Meta Global AI Developer Hackathon. Submission due **Thu 2026-11-05, 10:00 Taiwan time**. Aim to submit by 09:00.
@@ -35,13 +35,13 @@ LINE and WhatsApp come last. The engine and the website come first; a chat app o
 | Accuracy | Run a test first and pick the method with the lowest error (see T1). MapAnything is excluded for now (no GPU budget yet); revisit when a card is available. |
 | Unclear sizes | Show them with a wider ± ("approx."), never block on them. The demo's point is that mapping, 3D and buying work end to end; a small error rate is acceptable and stated. |
 | Taste | Chat plus inspiration photos the user uploads. |
-| Views | (a) 3D view of the room, as realistic as we can make it. (b) Realistic photo = a frame from the video, edited with Meta's image model to add or swap furniture. |
+| Views | (a) 3D view of the room, as realistic as we can make it. (b) Realistic photo = a frame from the video, edited with Meta's image model to add or swap furniture. 2026-11-04: the Real view (splat, then video photos) is removed; the 3D view is coloured blocks (no textures) and realism comes from (b). |
 | UI | A chat UI inside the website. The chat is a **personal AI shopping agent** that calls tools (room, search, place, move, fit, photo, list) and updates the 3D view live, not a fixed question script. LINE / WhatsApp later. |
 | Buying | Shopee links; the user buys. No agent checkout yet. |
 | Fit | Product sizes come from the listing (parsed by AI, with confidence) and are checked against the room by code. |
 | Products | Shopee Taiwan via Apify scrapers for now, results cached. Budget cap: **US$3 total** (raised from 3 runs / US$1 on 2026-11-04); only well-rated, trusted listings enter the catalog; each run capped with Apify's `maxTotalChargeUsd`; usage checked via Apify's usage API before each run. Affiliate API or shop partnerships later. |
 | SAM | Still needed: per-object outlines → per-object sizes, tracking across frames, clickable objects in 3D, clean cut-outs for edits. |
-| Repo | This repo. History restarted for the new direction; old Desk code is backed up in `../desk-backup-before-reset.bundle`. Rename later. |
+| Repo | This repo. History restarted for the new direction; old Desk code is backed up in `../desk-backup-before-reset.bundle`. Product name **Homie** (2026-11-04), site homie-tw.pages.dev (homie.pages.dev is taken). |
 
 ## 5. User flow (website v1)
 

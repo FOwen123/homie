@@ -14,9 +14,8 @@ export type Keyframe = { file: string; cam_to_room: number[][]; fx: number; fy: 
 export type Room = {
   version: 1; shell: { width: number; depth: number; height: number; walls: Wall[] };
   objects: RoomObject[]; keyframes: Keyframe[]; world_to_room: number[][];
-  photos?: Keyframe[]; // full-resolution video frames for the Real view (pipeline/photos.py)
   finishes?: { wall: string; floor: string; ceiling: string; floor_material: string; style: string };
-  judge?: { model: string; views: number[]; rounds: { round: number; scores: number[]; fixes: number; kept: boolean }[]; final: number[] };
+  judge?: { model: string; views: number[]; rounds: { round: number; scores: number[]; fixes: number; kept: boolean }[]; final: number[]; issues?: string[][] };
 };
 
 export type Product = {

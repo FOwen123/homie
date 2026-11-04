@@ -25,14 +25,15 @@ function bestView(room: Room, pl: Placement, pr: Product) {
   }
   let best: { k: Keyframe; box: number[]; score: number } | null = null;
   for (const k of room.keyframes) {
-    const q = pts.map((p) => project(k, p));
-    if (q.some((v) => !v)) continue;
-    const xs = q.map((v) => v!.x), ys = q.map((v) => v!.y);
-    const box = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
-    const inside = box[0] > -0.05 * k.w && box[2] < 1.05 * k.w && box[1] > -0.05 * k.h && box[3] < 1.05 * k.h;
-    if (!inside) continue;
+    const q = pts.map((p) => project(k, p)).filter((v) => !!v);
+    if (q.length < 4) continue; // half its corners in front of the camera (a big rug never has all of them)
+    const xs = q.map((v) => v.x), ys = q.map((v) => v.y);
+    const whole = (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys));
+    const box = [Math.max(0, Math.min(...xs)), Math.max(0, Math.min(...ys)), Math.min(k.w, Math.max(...xs)), Math.min(k.h, Math.max(...ys))];
+    const shown = box[2] > box[0] && box[3] > box[1] ? ((box[2] - box[0]) * (box[3] - box[1])) / whole : 0;
+    if (shown < 0.35) continue; // enough of its spot in the frame: a big rug, or a spot near the camera, is rarely whole
     const area = ((box[2] - box[0]) * (box[3] - box[1])) / (k.w * k.h);
-    const score = Math.min(area, 0.25) - Math.abs((box[0] + box[2]) / 2 / k.w - 0.5) * 0.1; // big enough, roughly centred
+    const score = Math.min(area, 0.25) * shown - Math.abs((box[0] + box[2]) / 2 / k.w - 0.5) * 0.1; // big, whole, roughly centred
     if (!best || score > best.score) best = { k, box, score };
   }
   return best;

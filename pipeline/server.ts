@@ -41,7 +41,7 @@ async function work() {
       await rm(join(bundle, ".work"), { recursive: true, force: true });
       job.state = "publishing";
       await $`bun run build`.cwd(join(ROOT, "web")).quiet();
-      await $`bunx wrangler pages deploy dist --project-name roomie-tw --branch main --commit-dirty=true`.cwd(join(ROOT, "web")).quiet();
+      await $`bunx wrangler pages deploy dist --project-name homie-tw --branch main --commit-dirty=true`.cwd(join(ROOT, "web")).quiet();
       job.state = "done";
       job.url = `/room/${id}`;
     } catch (e: any) {
@@ -83,7 +83,7 @@ Bun.serve({
     return new Response("not found", { status: 404 });
   },
 });
-console.log(`Roomie processing server on :${PORT} · ${(await readdir(UPLOADS).catch(() => [])).length} past uploads`);
+console.log(`Homie processing server on :${PORT} · ${(await readdir(UPLOADS).catch(() => [])).length} past uploads`);
 
 // Open a Cloudflare quick tunnel and register its URL in KV, so /api/upload on the website finds us.
 const KV_NAMESPACE = "e887d89473a542d1a3a32863a41d31f2"; // web/wrangler.toml LIMITS

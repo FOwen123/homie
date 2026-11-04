@@ -73,7 +73,7 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
         {busy && <div className="flex items-center gap-2 text-[15px] text-fog"><span className="pulse-dot h-2 w-2 rounded-full bg-powder-blue" />{t("thinking")}</div>}
         {turns.length <= 1 && !busy && (
           <div className="flex flex-wrap gap-2">
-            {(["quick1", "quick2", "quick3"] as const).map((k) => (
+            {(["quickPlan", "quick1", "quick2", "quick3"] as const).map((k) => (
               <button key={k} onClick={() => send(t(k))} className="min-h-11 rounded-full bg-bone-white px-4 text-[15px]">{t(k)}</button>
             ))}
           </div>
@@ -148,7 +148,7 @@ export function PhotoCard({ roomId, placement }: { roomId: string; placement?: P
   }, [roomId, id, want]);
   if (!img && !want) return <button onClick={() => setWant(true)} className="min-h-11 rounded-full bg-charcoal px-4 text-[15px] text-paper-white shadow-button">{t("showMe")}</button>;
   if (!img) return <div className="flex aspect-[3/4] w-full max-w-sm items-center justify-center rounded-[24px] bg-bone-white text-[15px] text-fog"><span className="pulse-dot mr-2 h-2 w-2 rounded-full bg-powder-blue" />{t("making")}</div>;
-  if (!img.image) return <p className="text-[15px] text-fog">{t("photoFailed")} {img.error === "busy" ? t("busy") : ""}</p>;
+  if (!img.image) return <p className="text-[15px] text-fog">{t("photoFailed")} {img.error === "busy" ? t("busy") : img.error?.startsWith("no frame") ? t("noFrame") : ""}</p>;
   return (
     <figure className="relative w-full max-w-sm overflow-hidden rounded-[24px]" onPointerDown={() => setBefore(true)} onPointerUp={() => setBefore(false)} onPointerLeave={() => setBefore(false)}>
       <img src={before ? img.frame : img.image} alt="" className="w-full select-none" draggable={false} />

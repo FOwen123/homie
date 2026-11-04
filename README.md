@@ -1,20 +1,19 @@
-# Roomie
+# Homie
 
 **Film your room. Get it measured. Buy furniture that actually fits.**
 
-Roomie turns a one-minute iPhone walk-around into a measured 3D room, then a personal AI shopping agent proposes real Shopee Taiwan products, checks in code that they fit, places them in the 3D room, and shows them in a realistic photo of your own room. You buy through the Shopee links.
+Homie turns a one-minute iPhone walk-around into a measured 3D room, then a personal AI shopping agent proposes real Shopee Taiwan products, checks in code that they fit, places them in the 3D room, and shows them in a realistic photo of your own room. You buy through the Shopee links.
 
-Live demo: **https://roomie-tw.pages.dev/room/demo** (works on phones and laptops; zh-TW / English).
+Live site: **https://homie-tw.pages.dev** · demo room: **https://homie-tw.pages.dev/room/demo** (works on phones and laptops; zh-TW / English).
 
 Built for the Meta Global AI Developer Hackathon (indie track).
 
 ## What it does
 
-1. **Capture** (`ios/RoomCapture`, app name Roomie): records video plus ARKit camera poses, intrinsics, detected planes and feature points. Works on iPhones without LiDAR. One tap uploads it.
+1. **Capture** (`ios/RoomCapture`, app name Homie): records video plus ARKit camera poses, intrinsics, detected planes and feature points. Works on iPhones without LiDAR. One tap uploads it.
 2. **Measure** (`pipeline/`): Muse Spark labels the furniture in keyframes, SAM 3.1 outlines each object, and the outlines are projected onto ARKit's surfaces to measure them. On our test room the bed came out 196 × 94 cm against 188 × 100 cm by tape measure, and the door at exactly 80 cm. Objects seen only partly are marked "approx." with a wider ±.
-3. **Rebuild**: Muse rebuilds every object from simple coloured parts at its measured size, like an architect's block model. A **judge loop** renders the blocks from the real camera positions, asks Muse what doesn't match the real frames, applies its fixes, and keeps them only if the match improves.
-4. **Realistic view**: a Gaussian splat of the room, fitted on Apple Silicon with [msplat](https://github.com/rayanht/msplat) from the same frames and ARKit poses, viewed in the browser with [Spark](https://sparkjs.dev).
-5. **Shop** (`web/`): a Muse Spark agent with tools (search the catalog, place / move / remove items, fix sizes, render a photo, build the list). Fit, clearance, door and ceiling checks are deterministic code; the model proposes, code enforces. Muse Image edits a real video frame to show a chosen product in place, always labelled as an AI preview.
+3. **Rebuild**: each piece's box is fitted to its SAM outlines in every keyframe that sees it, and gets its own photo crop (the outline its box matches best). Muse rebuilds every object from that crop as simple coloured parts at its measured size, like an architect's block model. A **judge loop** renders the blocks from the real camera positions, asks Muse what doesn't match the real frames, applies its fixes, and keeps them only if the match improves.
+4. **Shop** (`web/`): a Muse Spark agent with tools (search the catalog, place / move / remove items, fix sizes, render a photo, build the list); ask "what does my room still need?" and it picks the gaps and fills the list. You can drag or turn any piece (it turns red if it hits a wall, furniture or the door's swing) and undo with Ctrl+Z / ⌘Z. Fit, clearance, door and ceiling checks are deterministic code; the model proposes, code enforces. Muse Image edits a real video frame to show a chosen product in place, always labelled as an AI preview.
 
 ## Meta models used
 

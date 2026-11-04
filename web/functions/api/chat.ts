@@ -1,4 +1,4 @@
-// The Roomie shopping agent: Muse Spark with tools that read the room, search the Shopee catalog, and
+// The Homie shopping agent: Muse Spark with tools that read the room, search the Shopee catalog, and
 // place/move/remove items. Tools run here, on our own code (fit checks are deterministic); the client
 // gets back the reply, the new room state and rich cards. Stateless: the client sends history + state.
 import { checkFit, findSpot, productMap, replaceSpot, withMoves } from "../../src/lib/fit";
@@ -6,7 +6,7 @@ import type { Card, ChatTurn, Product, Room, RoomState } from "../../src/lib/typ
 import { type Env, json, loadCatalog, loadRoom, meta, underLimit } from "../_lib";
 
 const MODEL = "muse-spark-1.3"; // standard mode: visitors' chats and photos stay out of model training
-const MAX_STEPS = 5;
+const MAX_STEPS = 6; // room plan: search, show, add to list, reply
 const MAX_BODY = 1_500_000; // the client shrinks photos to ~768 px JPEG, well under this
 const MAX_OUT = 800; // output tokens per model call
 
@@ -63,7 +63,7 @@ function describeRoom(room: Room, state: RoomState, pm: Map<string, Product>) {
   ].join("\n");
 }
 
-const SYSTEM = (lang: string, room: string) => `You are Roomie, a friendly personal AI shopping assistant for renters in Taiwan.
+const SYSTEM = (lang: string, room: string) => `You are Homie, a friendly personal AI shopping assistant for renters in Taiwan.
 The user filmed their room; it is measured and shown in 3D next to this chat. Help them find real Shopee Taiwan products that fit, place them in the 3D room, show realistic photos, and build a shopping list.
 Rules:
 - Act with tools instead of asking questions. Ask at most one short question, and only when you can't act at all (for example no budget hint and they asked for "the best"). Never ask the user to measure anything; sizes marked approx are fine as they are.
@@ -72,6 +72,7 @@ Rules:
 - Product data is in Chinese; reply in ${lang === "zh" ? "Traditional Chinese (zh-TW)" : "English"}, whatever language the product titles are in. Prices in NT$.
 - Keep replies short: 1-3 sentences. The cards show the details.
 - To replace something already in the room, pass replace_object_id to show_products (or place_item).
+- When asked what the room needs (or to plan or furnish it): compare its furniture with what a renter's room usually has (bed, desk, chair, clothes storage, shelves, desk lamp, bin, rug, nightstand) and pick the 3-4 biggest gaps for this room, taste and budget. Search each gap (call search_products for all of them at once), then show_products once per gap with your best 1-2 picks, then add_to_list the best pick of each gap that fits (fit "yes" or "check"). Reply with one short line per gap saying why the room needs it.
 ${room}`;
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {

@@ -6,9 +6,9 @@ import { TransformControls } from "three/examples/jsm/controls/TransformControls
 import { collision, magnet, moveIn, withMoves } from "../lib/fit";
 import type { Part, Pose, Product, Room, RoomState, Size } from "../lib/types";
 
-export type ViewMode = "blocks" | "walk" | "real";
+export type ViewMode = "blocks" | "walk";
 type Props = {
-  room: Room; roomUrl: string; state: RoomState; products: Map<string, Product>; mode: ViewMode;
+  room: Room; state: RoomState; products: Map<string, Product>; mode: ViewMode;
   selected: string | null; onSelect: (id: string | null) => void;
   onLabel?: (pos: { x: number; y: number } | null) => void; // screen position of the selected object's top
   onMove?: (id: string, pose: Pose) => void; // the user dragged or nudged a piece
@@ -84,10 +84,8 @@ function wallGroup(room: Room, wallColor: string) {
   return group;
 }
 
-export function RoomViewer({ room, roomUrl, state, products, mode, selected, onSelect, onLabel, onMove }: Props) {
+export function RoomViewer({ room, state, products, mode, selected, onSelect, onLabel, onMove }: Props) {
   const host = useRef<HTMLDivElement>(null);
-  const imgs = useRef<(HTMLImageElement | null)[]>([]); // the two photo layers that cross-fade
-  const hasPhotos = !!room.photos?.length;
   const api = useRef<{ rebuild: () => void; reset: () => void; hold: Hold; nudge: (h: Hold) => void; shift: (right: number, away: number, turn: number) => void } | null>(null);
   const t = useT();
   const { lang } = useLang();
@@ -101,7 +99,7 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
     const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
-        el.appendChild(renderer.domElement);
+    el.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(50, 1, 0.05, 100);
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -114,7 +112,9 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
     const sun = new THREE.DirectionalLight(0xffffff, 1.6);
     sun.position.set(2.5, 6, 3.5);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.bias = -0.0005; // without these, parts shadow themselves in stripes (shadow acne)
+    sun.shadow.normalBias = 0.02;
     Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4 });
     scene.add(sun);
 
@@ -160,34 +160,11 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
     const mats = new Map<string, THREE.MeshStandardMaterial>();
     const mat = (c: string) => mats.get(c) ?? mats.set(c, new THREE.MeshStandardMaterial({ color: c, roughness: 0.75 })).get(c)!;
 
-    // Realistic view: the splat lives in ARKit world space; world_to_room puts it in room coordinates.
-    let splat: THREE.Object3D | null = null;
-    let spark: THREE.Object3D | null = null;
-    const loadSplat = async () => {
-      if (splat) return;
-      const { SparkRenderer, SplatMesh } = await import("@sparkjsdev/spark");
-      spark = new SparkRenderer({ renderer }) as unknown as THREE.Object3D;
-      scene.add(spark);
-      const mesh = new SplatMesh({ url: `${roomUrl}/room.splat` }) as unknown as THREE.Object3D;
-      const m = room.world_to_room;
-      mesh.matrixAutoUpdate = false;
-      mesh.matrix.set(...(m.flat() as [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number]));
-      splat = mesh;
-      scene.add(mesh);
-    };
-
     const rebuild = () => {
       const { state, products: pm, mode, selected } = live.current;
       blocks.clear();
       products.clear();
-      const real = mode === "real";
       if (mode !== lastMode) { lastMode = mode; home(); }
-      if (real && !photos.length) void loadSplat(); // rooms processed before photos.py fall back to the splat
-      if (splat) splat.visible = real;
-      floor.visible = walls.visible = blocks.visible = !real;
-      // over photos, blocks would slide against the room as you turn (the photo is from a nearby spot, not
-      // this exact camera): the AI photo is the faithful preview there
-      products.visible = !(real && photos.length);
       for (const o of withMoves(room, state).objects) {
         if (state.removed.includes(o.id)) continue;
         const size = state.sizeEdits[o.id] ?? o.size;
@@ -219,8 +196,7 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
       } else gizmo.detach();
     };
 
-    // Blocks: dollhouse view from above. Real: stand where the phone stood, facing into the room, so the
-    // splat is seen from the inside like the video (from outside, a room capture looks like blobs).
+    // the keyframe taken nearest the middle of the room, facing into it
     const bestKey = () => {
       let best = room.keyframes[0], score = -Infinity;
       for (const k of room.keyframes) {
@@ -262,65 +238,8 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
       const fwd = mid.distanceTo(pos) > 0.5 ? mid.sub(pos).normalize() : new THREE.Vector3(-M[0][2], 0, -M[2][2]).normalize();
       firstPerson(pos, fwd, 70);
     };
-    // Real view from photos: the real video frame that best matches where the camera looks (direction first,
-    // then distance), scaled to the camera's lens and slid/rotated so its centre ray lands where the camera
-    // sees that ray. Placed products render on top, like an AR preview.
-    const photos = room.photos ?? [];
-    const pPos = photos.map((p) => new THREE.Vector3(p.cam_to_room[0][3], p.cam_to_room[1][3], p.cam_to_room[2][3]));
-    const pFwd = photos.map((p) => new THREE.Vector3(-p.cam_to_room[0][2], -p.cam_to_room[1][2], -p.cam_to_room[2][2]).normalize());
-    const pUp = photos.map((p) => new THREE.Vector3(-p.cam_to_room[0][0], -p.cam_to_room[1][0], -p.cam_to_room[2][0])); // upright image up = ARKit -x
-    const scale = () => photos.length ? Math.max(el.clientWidth / photos[0].w, el.clientHeight / photos[0].h) * 1.15 : 1; // 15% margin for the slide
-    const photoFov = () => (2 * Math.atan(el.clientHeight / 2 / (photos[0].fy * scale())) * 180) / Math.PI;
-    let front = 0, shownPhoto = -1;
-    const dir = new THREE.Vector3(), tip = new THREE.Vector3(), up = new THREE.Vector3();
-    const place = (img: HTMLImageElement) => {
-      const i = Number(img.dataset.i), p = photos[i], k = scale();
-      if (!p) return;
-      tip.copy(pPos[i]).addScaledVector(pFwd[i], 10).project(camera);
-      up.copy(pUp[i]).transformDirection(camera.matrixWorldInverse);
-      const sx = ((tip.x + 1) / 2) * el.clientWidth, sy = ((1 - tip.y) / 2) * el.clientHeight;
-      Object.assign(img.style, { width: `${p.w * k}px`, height: `${p.h * k}px`, transformOrigin: `${p.cx * k}px ${p.cy * k}px`,
-        transform: `translate(${sx - p.cx * k}px, ${sy - p.cy * k}px) rotate(${Math.atan2(up.x, up.y)}rad)`, visibility: tip.z < 1 ? "visible" : "hidden" });
-    };
-    let preloaded = false;
-    const showPhotos = () => {
-      if (!preloaded) { // fetch them all once so turning doesn't wait on the network
-        preloaded = true;
-        for (const p of photos) new Image().src = `${roomUrl}/${p.file}`;
-      }
-      camera.getWorldDirection(dir);
-      let best = 0, score = -Infinity;
-      pFwd.forEach((f, i) => {
-        const s = f.dot(dir) - 0.35 * Math.hypot(pPos[i].x - camera.position.x, pPos[i].z - camera.position.z);
-        if (s > score) { score = s; best = i; }
-      });
-      const [a, b] = [imgs.current[front]!, imgs.current[1 - front]!];
-      const want = String(best);
-      const swap = () => { b.style.opacity = "1"; a.style.opacity = "0"; front = 1 - front; };
-      if (best !== shownPhoto) {
-        shownPhoto = best;
-        if (a.dataset.i === want) { /* already on screen: a pending load into b will not swap */ }
-        else if (b.dataset.i === want && b.complete && b.naturalWidth) swap(); // turned back to the photo just left
-        else {
-          b.dataset.i = want;
-          b.onload = () => { if (b.dataset.i === String(shownPhoto)) swap(); };
-          b.src = `${roomUrl}/${photos[best].file}`;
-        }
-      }
-      place(a);
-      place(b);
-    };
-    const inside = () => {
-      const best = bestKey();
-      // the splat is only sharp from where the phone was: use its exact pose and lens, and look around in place
-      const M = best.cam_to_room;
-      const pos = new THREE.Vector3(M[0][3], M[1][3], M[2][3]);
-      const fwd = new THREE.Vector3(-M[0][2], -M[1][2], -M[2][2]).normalize();
-      firstPerson(pos, fwd, photos.length ? photoFov() : (2 * Math.atan(best.h / 2 / best.fy) * 180) / Math.PI);
-    };
     let lastMode: ViewMode = "blocks";
     const home = () => {
-      if (live.current.mode === "real") return inside();
       if (live.current.mode === "walk") return walk();
       const r = Math.max(room.shell.width, room.shell.depth);
       camera.fov = 50;
@@ -335,7 +254,7 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
       controls.update();
     };
     // Buttons and keys: in the overview, turn orbits and forward zooms; in first person, turn looks
-    // around and forward walks (the Real view stays where the phone stood, so it only turns).
+    // around and forward walks.
     // shortcut: walking passes through furniture (walls only), add object collisions if users get lost
     const hold: Hold = { fwd: 0, turn: 0 };
     const Y = new THREE.Vector3(0, 1, 0), look = new THREE.Vector3();
@@ -347,7 +266,7 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
         camera.position.copy(controls.target).add(look);
       } else {
         look.subVectors(controls.target, camera.position).applyAxisAngle(Y, -h.turn * 1.6 * dt);
-        if ((mode === "walk" || photos.length) && h.fwd) clampIn(camera.position.addScaledVector(look.clone().setY(0).normalize(), h.fwd * 1.2 * dt));
+        if (h.fwd) clampIn(camera.position.addScaledVector(look.clone().setY(0).normalize(), h.fwd * 1.2 * dt));
         controls.target.copy(camera.position).add(look);
       }
     };
@@ -388,7 +307,6 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
       renderer.domElement.style.width = "100%";
       renderer.domElement.style.height = "100%";
       camera.aspect = w / Math.max(h, 1);
-      if (live.current.mode === "real" && photos.length) camera.fov = photoFov();
       camera.updateProjectionMatrix();
     };
     const ro = new ResizeObserver(resize);
@@ -421,7 +339,6 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
           onLabel(v.z < 1 ? { x: ((v.x + 1) / 2) * el.clientWidth, y: ((1 - v.y) / 2) * el.clientHeight } : null);
         } else onLabel(null);
       }
-      if (live.current.mode === "real" && photos.length) showPhotos();
       renderer.render(scene, camera);
     });
     return () => {
@@ -432,7 +349,7 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
       renderer.dispose();
       el.removeChild(renderer.domElement);
     };
-  }, [room, roomUrl]);
+  }, [room]);
 
   useEffect(() => { api.current?.rebuild(); }, [state, products, mode, selected, edit]);
 
@@ -447,22 +364,16 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
     if (k.fwd) api.current.hold.fwd = down ? k.fwd : 0;
     if (k.turn) api.current.hold.turn = down ? k.turn : 0;
   };
-  const canMove = mode !== "real" || hasPhotos; // photos: walk to see the room from other spots
   const fwdLabel = mode === "blocks" ? [t("zoomIn"), t("zoomOut")] : [t("forward"), t("back")];
 
   return (
     <div className="relative h-full w-full">
-      {hasPhotos && ( // stays mounted so the shown photo survives switching views
-        <div aria-hidden className={`pointer-events-none absolute inset-0 overflow-hidden rounded-[24px] bg-charcoal ${mode === "real" ? "" : "hidden"}`}>
-          {[0, 1].map((i) => <img key={i} ref={(e) => { imgs.current[i] = e; }} alt="" className="absolute top-0 left-0 max-w-none transition-opacity duration-200" style={{ opacity: 0 }} />)}
-        </div>
-      )}
       <div ref={host} tabIndex={0} role="application" aria-label={`${t("viewerLabel")} ${t("keysHint")}`}
         onKeyDown={(e) => key(e, true)} onKeyUp={(e) => key(e, false)} onBlur={() => api.current && Object.assign(api.current.hold, { fwd: 0, turn: 0 })}
         className="relative h-full w-full touch-none rounded-[24px] focus-visible:outline-offset-[-4px]" />
       <div className="absolute top-1/2 right-2 flex -translate-y-1/2 flex-col gap-0.5 rounded-full bg-paper-white/90 p-1 shadow-float" aria-label={t("moveControls")} role="group">
-        <PadButton label={fwdLabel[0]} hold={{ fwd: 1 }} api={api} disabled={!canMove}>{mode === "blocks" ? <><path d="M12 5v14" /><path d="M5 12h14" /></> : <path d="m6 15 6-6 6 6" />}</PadButton>
-        <PadButton label={fwdLabel[1]} hold={{ fwd: -1 }} api={api} disabled={!canMove}>{mode === "blocks" ? <path d="M5 12h14" /> : <path d="m6 9 6 6 6-6" />}</PadButton>
+        <PadButton label={fwdLabel[0]} hold={{ fwd: 1 }} api={api}>{mode === "blocks" ? <><path d="M12 5v14" /><path d="M5 12h14" /></> : <path d="m6 15 6-6 6 6" />}</PadButton>
+        <PadButton label={fwdLabel[1]} hold={{ fwd: -1 }} api={api}>{mode === "blocks" ? <path d="M5 12h14" /> : <path d="m6 9 6 6 6-6" />}</PadButton>
         <PadButton label={t("turnLeft")} hold={{ turn: -1 }} api={api}><path d="M9 14 4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-2" /></PadButton>
         <PadButton label={t("turnRight")} hold={{ turn: 1 }} api={api}><path d="m15 14 5-5-5-5" /><path d="M20 9H10a6 6 0 0 0 0 12h2" /></PadButton>
         <button onClick={() => api.current?.reset()} aria-label={t("reset")} title={t("reset")} className="grid h-11 w-11 place-items-center rounded-full text-graphite">

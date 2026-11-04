@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Chat, ShopAll, ShoppingList, freshPhotos, photoKey } from "./components/Chat";
 import { RoomViewer, type ViewMode } from "./components/RoomViewer";
 import { MeasureChip, Segmented, dims } from "./components/bits";
@@ -42,30 +42,74 @@ function LangToggle() {
 function Header({ children }: { children?: React.ReactNode }) {
   return (
     <header className="flex items-center gap-3">
-      <a href="/" className="shrink-0"><img src="/roomie-logo.png" alt="Roomie" className="h-7 w-auto" /></a>
+      <a href="/" className="shrink-0"><img src="/homie-logo.png" alt="Homie" className="h-7 w-auto" /></a>
       <div className="min-w-0 flex-1">{children}</div>
       <LangToggle />
     </header>
   );
 }
 
+// shortcut: no public TestFlight link yet, so the app button opens the build-it-yourself steps; set it once beta review passes
+const TESTFLIGHT_URL: string | undefined = undefined;
+const SCAN_STEPS = "https://github.com/FOwen123/desk#scan-your-own-room";
+
 function Landing() {
   const t = useT();
+  const [demo, setDemo] = useState<Room | null>(null);
+  useEffect(() => { fetch("/rooms/demo/room.json").then((r) => r.json()).then(setDemo); }, []);
+  const steps = [["step1", "step1Body"], ["step2", "step2Body"], ["step3", "step3Body"]] as const;
   return (
-    <main className="mx-auto flex min-h-full max-w-[1200px] flex-col px-4 py-6 md:px-10">
+    <main className="mx-auto max-w-[1200px] px-4 py-6 md:px-10">
       <Header />
-      <section className="my-auto py-12">
-        <h1 className="max-w-3xl text-[48px] leading-[1.05] md:text-[96px]">{t("tagline")}</h1>
-        <p className="mt-5 max-w-xl text-[18px] text-graphite">{t("sub")}</p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <a href="/room/demo" className="inline-flex min-h-12 items-center rounded-full bg-charcoal px-6 text-[16px] text-paper-white shadow-button">{t("openDemo")}</a>
-          <a href="https://github.com/FOwen123/desk#scan-your-own-room" className="inline-flex min-h-12 items-center rounded-full border border-ink/12 bg-bone-white px-6 text-[16px]">{t("scanOwn")}</a>
+      <section className="grid items-center gap-8 py-10 md:grid-cols-[1fr_1.1fr] md:gap-12 md:py-16">
+        <div>
+          <h1 className="text-[48px] leading-[1.05] md:text-[80px]">{t("tagline")}</h1>
+          <p className="mt-5 max-w-xl text-[18px] text-graphite">{t("sub")}</p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <a href="/room/demo" className="inline-flex min-h-12 items-center rounded-full bg-charcoal px-6 text-[16px] text-paper-white shadow-button">{t("openDemo")}</a>
+            <a href="#try" className="inline-flex min-h-12 items-center rounded-full border border-ink/12 bg-bone-white px-6 text-[16px]">{t("scanOwn")}</a>
+          </div>
         </div>
-        <p className="mt-6 max-w-xl text-[13px] text-fog">Muse Spark · SAM 3.1 · Muse Image · ARKit · Gaussian splat. Built for the Meta Global AI Developer Hackathon.</p>
+        <figure>
+          <div className="iris-frame h-[360px] md:h-[480px]">
+            <div className="relative h-full overflow-hidden rounded-[24px] bg-sky-tint">
+              {demo && <RoomViewer room={demo} state={EMPTY} products={NO_PRODUCTS} mode="blocks" selected={null} onSelect={() => {}} />}
+            </div>
+          </div>
+          <figcaption className="mt-3 text-[13px] text-fog">{t("demoCaption")}</figcaption>
+        </figure>
       </section>
+      <section className="py-10 md:py-16">
+        <h2 className="text-[36px] leading-[1.1] md:text-[56px]">{t("howTitle")}</h2>
+        <ol className="mt-8 grid gap-3 md:grid-cols-3 md:gap-6">
+          {steps.map(([h, b], i) => (
+            <li key={h} className="rounded-[24px] bg-bone-white p-6 md:rounded-[32px] md:p-10">
+              <span className="num text-[13px] text-fog">0{i + 1}</span>
+              <h3 className="mt-2 text-[22px] leading-[1.25] md:text-[28px]">{t(h)}</h3>
+              <p className="mt-3 text-[15px] text-graphite">{t(b)}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+      <section id="try" className="py-10 md:py-16">
+        <h2 className="text-[36px] leading-[1.1] md:text-[56px]">{t("tryTitle")}</h2>
+        <ol className="mt-6 max-w-2xl space-y-3 text-[17px]">
+          <li>1. {t("try1")}</li>
+          <li>2. {t("try2")}</li>
+          <li>3. {t("try3")}</li>
+        </ol>
+        <div className="mt-8 flex flex-wrap gap-3">
+          <a href={TESTFLIGHT_URL ?? SCAN_STEPS} className="inline-flex min-h-12 items-center rounded-full bg-charcoal px-6 text-[16px] text-paper-white shadow-button">{t(TESTFLIGHT_URL ? "getApp" : "buildApp")}</a>
+          <a href="/room/demo" className="inline-flex min-h-12 items-center rounded-full border border-ink/12 bg-bone-white px-6 text-[16px]">{t("openDemo")}</a>
+        </div>
+        <p className="mt-4 text-[13px] text-fog">{t("iphoneOnly")}</p>
+      </section>
+      <footer className="border-t border-ink/6 py-8 text-[13px] text-fog">Muse Spark · SAM 3.1 · Muse Image · ARKit. Built for the Meta Global AI Developer Hackathon.</footer>
     </main>
   );
 }
+
+const NO_PRODUCTS = new Map<string, Product>();
 
 function RoomPage({ id }: { id: string }) {
   const t = useT();
@@ -80,6 +124,30 @@ function RoomPage({ id }: { id: string }) {
   const [tab, setTab] = useState<"chat" | "shop" | "list">("chat");
   const [editing, setEditing] = useState(false);
   const products = useMemo(() => productMap(catalog), [catalog]);
+  // Undo: every change to the room (a drag, a nudge, a chat reply, a list edit) can be taken back, up to 50
+  const [past, setPast] = useState<RoomState[]>([]);
+  const prev = useRef(state), undoing = useRef(false);
+  useEffect(() => {
+    const before = prev.current; // read now: the updater below runs after prev moves on
+    if (before !== state && !undoing.current) setPast((p) => [...p.slice(-49), before]);
+    undoing.current = false;
+    prev.current = state;
+  }, [state]);
+  const undo = () => {
+    const last = past.at(-1);
+    if (!last) return;
+    undoing.current = true;
+    setPast(past.slice(0, -1));
+    setState(last);
+  };
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement; // their own undo
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "z" && !typing) { e.preventDefault(); undo(); }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  });
 
   useEffect(() => {
     fetch(`${url}/room.json`).then((r) => r.json()).then(setRoom);
@@ -122,17 +190,23 @@ function RoomPage({ id }: { id: string }) {
         <section className="relative h-[46svh] shrink-0 md:h-full md:flex-1">
           <div className="iris-frame h-full">
             <div className="relative h-full overflow-hidden rounded-[24px] bg-sky-tint">
-              <RoomViewer room={room} roomUrl={url} state={state} products={products} mode={mode} selected={selected}
+              <RoomViewer room={room} state={state} products={products} mode={mode} selected={selected}
                 onSelect={(sel) => { setSelected(sel); if (room.objects.some((o) => o.id === sel)) setTab("shop"); }} onLabel={setLabel}
                 onMove={(id, pose) => setState(moveIn(state, id, pose))} />
               <div className="pointer-events-none absolute top-3 left-3 flex flex-col items-start gap-1.5">
               {room.judge && mode === "blocks" && (
                 <div className="pointer-events-auto rounded-full bg-paper-white/90 px-3 py-1 text-[12px] text-graphite"
-                  title={room.judge.rounds.map((r) => `round ${r.round}: ${r.scores.join(", ")}${r.kept ? "" : " (reverted)"}`).join("\n")}>
+                  title={[...room.judge.rounds.map((r) => `round ${r.round}: ${r.scores.join(", ")}${r.kept ? "" : " (reverted)"}`), ...(room.judge.issues ?? []).flat().map((i) => `· ${i}`)].join("\n")}>
                   {t("aiChecked")} <span className="num text-ink">{(room.judge.final.reduce((a, b) => a + b, 0) / room.judge.final.length).toFixed(1)}/10</span> · {room.judge.rounds.length} {t("rounds")}
                 </div>
               )}
-                <p className="hidden rounded-full bg-paper-white/90 px-3 py-1 text-[12px] text-graphite md:block">{t(mode === "real" ? "dragHintReal" : "dragHint")}</p>
+                <p className="hidden rounded-full bg-paper-white/90 px-3 py-1 text-[12px] text-graphite md:block">{t("dragHint")}</p>
+                {past.length > 0 && (
+                  <button onClick={undo} title={`${t("undo")} (Ctrl+Z / ⌘Z)`} className="pointer-events-auto flex min-h-11 items-center gap-1.5 rounded-full bg-paper-white/90 px-4 text-[14px] shadow-float">
+                    <svg aria-hidden viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M9 14 4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-2" /></svg>
+                    {t("undo")}
+                  </button>
+                )}
               </div>
               {label && (obj || placed) && (
                 <div className="pointer-events-auto absolute -translate-x-1/2 -translate-y-full" style={{ left: label.x, top: label.y - 6 }}>
@@ -142,7 +216,7 @@ function RoomPage({ id }: { id: string }) {
               )}
               <div className="absolute inset-x-0 bottom-3 flex justify-center">
                 <Segmented label={t("viewMode")} value={mode} onChange={setMode} className="shadow-float"
-                  items={(["blocks", "walk", "real"] as const).map((k) => ({ key: k, label: t(k) }))} />
+                  items={(["blocks", "walk"] as const).map((k) => ({ key: k, label: t(k) }))} />
               </div>
             </div>
           </div>

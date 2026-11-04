@@ -1,4 +1,4 @@
-# Room engine (working name: Roomie TW)
+# Room engine (name: Homie, homie-tw.pages.dev)
 
 A website where a Taiwan renter uploads a walk-around video of their room. The engine measures the room and everything in it, learns their taste through chat and inspiration photos, and proposes real Shopee Taiwan furniture that fits, shown in a 3D view of the room and in realistic photos (frames from the video edited with Meta's image model). The user buys through the Shopee links. Built for the Meta Global AI Developer Hackathon: submission due **Thu 2026-11-05 10:00 Taiwan time**, so the repo goes public then.
 

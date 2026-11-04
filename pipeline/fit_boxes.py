@@ -5,6 +5,9 @@ Only pieces placed from sparse points (±20 cm or worse) are refitted: pieces si
 their size (their outlines are often half hidden, e.g. a desk behind a chair). Masks miss whatever other
 things hide, so a pixel of mask the box misses costs twice a pixel of box outside the mask (Tversky
 index); with plain IoU boxes shrink.
+Then every piece gets its own crop (the photo Muse rebuilds its parts and colours from): the outline in the
+keyframe where the piece's box matches it best. room.py's crop is the biggest outline of the label, so two
+bins, or a lamp and a ring light, would share one photo.
 
 Usage: uv run --with numpy --with pillow python pipeline/fit_boxes.py <bundle_dir> <seg_dir>   (rewrites room.json)
 """
@@ -76,7 +79,7 @@ for i, k in enumerate(room["keyframes"]):
         full = Image.new("L", (k["w"] // SC, k["h"] // SC))
         part = Image.fromarray((r > 0).astype(np.uint8) * 255).resize((max(1, (b["right"] - b["left"]) // SC), max(1, (b["bottom"] - b["top"]) // SC)))
         full.paste(part, (b["left"] // SC, b["top"] // SC))
-        masks.setdefault(i, []).append((o["label"], np.asarray(full) > 127))
+        masks.setdefault(i, []).append((o["label"], np.asarray(full) > 127, o))
 
 
 def views_for(o):
@@ -89,24 +92,56 @@ def views_for(o):
         if uv is None:
             continue
         u, v = int(uv[0, 0] / SC), int(uv[0, 1] / SC)
-        for lab, m in masks.get(i, []):
+        for lab, m, _ in masks.get(i, []):
             if lab in labels and 0 <= v < m.shape[0] and 0 <= u < m.shape[1] and m[max(0, v - 3):v + 4, max(0, u - 3):u + 4].any():
                 out.append((k, m))
                 break
     return out
 
 
+def match(b, m):
+    inter = (b & m).sum()
+    denom = m.sum() + 0.5 * (b.sum() - inter)
+    return inter / denom if denom else 0
+
+
 def score(views, p):
     ious = []
     for k, m in views:
         b = box_mask(k, corners(*p))
-        if b is None:  # a corner behind this camera: counts as a miss, or boxes could escape hard views
-            ious.append(0.0)
-            continue
-        inter = (b & m).sum()
-        denom = m.sum() + 0.5 * (b.sum() - inter)
-        ious.append(inter / denom if denom else 0)
+        ious.append(0.0 if b is None else match(b, m))  # a corner behind this camera counts as a miss, or boxes could escape hard views
     return np.mean(ious) if ious else 0.0
+
+
+def recrop(o):
+    """Cut this piece out of the keyframe whose outline (of its label) its box matches best; uncut views first."""
+    labels = SAME.get(o["label"], {o["label"]})
+    s = o["size"]
+    p = [o["center"][0], o["center"][2], s["w"], s["d"], s["h"], max(0.0, o["center"][1] - s["h"] / 2), o["yaw"]]
+    best = None
+    for i, k in enumerate(room["keyframes"]):
+        b = box_mask(k, corners(*p))
+        if b is None:
+            continue
+        for lab, m, so in masks.get(i, []):
+            if lab not in labels:
+                continue
+            bd = so["mask"]["bounds"]
+            v = match(b, m) * (0.5 if bd["left"] <= 1 or bd["right"] >= k["w"] - 1 or bd["bottom"] >= k["h"] - 1 else 1)
+            if v > 0.3 and (best is None or v > best[0]):
+                best = (v, k, so)
+    if best is None:
+        return False
+    _, k, so = best
+    mk, bd = so["mask"], so["mask"]["bounds"]
+    r = np.fromfile(seg / f"{Path(k['file']).stem}_{so['id']}.mask", np.uint8).reshape(mk["height"], mk["width"])
+    img = Image.open(bundle / k["file"]).convert("RGB").crop((bd["left"], bd["top"], bd["right"], bd["bottom"]))
+    bg = Image.new("RGB", img.size, (255, 255, 255))
+    bg.paste(img, (0, 0), Image.fromarray((r > 0).astype(np.uint8) * 255).resize(img.size))
+    (bundle / "crops").mkdir(exist_ok=True)
+    bg.save(bundle / "crops" / f'{o["id"]}.jpg', quality=88)
+    o["crop"] = f'crops/{o["id"]}.jpg'
+    return True
 
 
 report = []
@@ -146,5 +181,6 @@ for o in room["objects"]:
     o["fit_iou"] = round(best, 3)
     report.append(f'{o["label"]} match {start:.2f}→{best:.2f} ({len(views)} views)')
 
+recropped = sum(recrop(o) for o in room["objects"])
 (bundle / "room.json").write_text(json.dumps(room, indent=1))
-print(f"fit_boxes: {len(report)} pieces refitted to their outlines · " + "; ".join(report))
+print(f"fit_boxes: {len(report)} pieces refitted to their outlines · " + "; ".join(report) + f" · {recropped} own crops")
