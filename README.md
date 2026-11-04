@@ -4,7 +4,7 @@
 
 Roomie turns a one-minute iPhone walk-around into a measured 3D room, then a personal AI shopping agent proposes real Shopee Taiwan products, checks in code that they fit, places them in the 3D room, and shows them in a realistic photo of your own room. You buy through the Shopee links.
 
-Live demo: **https://roomie-9v2.pages.dev/room/demo** (works on phones and laptops; zh-TW / English).
+Live demo: **https://roomie-tw.pages.dev/room/demo** (works on phones and laptops; zh-TW / English).
 
 Built for the Meta Global AI Developer Hackathon (indie track).
 
@@ -41,6 +41,16 @@ bun pipeline/server.ts
 ```
 
 Public use has soft daily limits (chat, photos, uploads) and every chat request has a bounded size and output, so casual use can't drain the API credits. The limits are KV counters, not atomic: a burst of concurrent requests can pass a few extra; the real ceiling is the Meta account's credit. Uploaded rooms are published to the site but never committed.
+
+## Scan your own room
+
+The capture app is not on the App Store or TestFlight yet. With a Mac and Xcode:
+
+1. `cd ios && xcodegen generate && open Roomie.xcodeproj`, pick your team and iPhone, then Run.
+2. Walk slowly around the room for about a minute, pointing at every wall and piece of furniture, then tap Stop.
+3. Tap Upload. The site processes it (about 5 minutes) and the app opens your room.
+
+Any iPhone with ARKit works; LiDAR is not needed.
 
 ## Limits, honestly
 

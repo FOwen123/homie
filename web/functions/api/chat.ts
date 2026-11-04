@@ -1,7 +1,7 @@
 // The Roomie shopping agent: Muse Spark with tools that read the room, search the Shopee catalog, and
 // place/move/remove items. Tools run here, on our own code (fit checks are deterministic); the client
 // gets back the reply, the new room state and rich cards. Stateless: the client sends history + state.
-import { checkFit, findSpot, productMap, replaceSpot } from "../../src/lib/fit";
+import { checkFit, findSpot, productMap, replaceSpot, withMoves } from "../../src/lib/fit";
 import type { Card, ChatTurn, Product, Room, RoomState } from "../../src/lib/types";
 import { type Env, json, loadCatalog, loadRoom, meta, underLimit } from "../_lib";
 
@@ -90,13 +90,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   body.state = {
     placements: (st.placements ?? []).slice(0, 20), removed: (st.removed ?? []).slice(0, 40).map(String),
     sizeEdits: Object.fromEntries(Object.entries(st.sizeEdits ?? {}).slice(0, 40)),
+    moved: Object.fromEntries(Object.entries(st.moved ?? {}).slice(0, 40)),
     taste: { style: String(st.taste?.style ?? "").slice(0, 200) || undefined, budget: Number(st.taste?.budget) || undefined, notes: String(st.taste?.notes ?? "").slice(0, 300) || undefined },
     list: (st.list ?? []).slice(0, 50).map(String),
   };
-  const [room, catalog] = await Promise.all([loadRoom(env, request, body.roomId), loadCatalog(env, request)]);
+  const [scanned, catalog] = await Promise.all([loadRoom(env, request, body.roomId), loadCatalog(env, request)]);
   const pm = productMap(catalog);
   // Keep only ids that exist in this room and catalog, so nothing client-made reaches the prompt unchecked.
-  const objIds = new Set(room.objects.map((o) => o.id));
+  const objIds = new Set(scanned.objects.map((o) => o.id));
   const num = (v: unknown, lo: number, hi: number) => Math.min(hi, Math.max(lo, Number(v) || 0));
   const st0 = body.state;
   const state: RoomState = {
@@ -105,8 +106,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     removed: st0.removed.filter((id) => objIds.has(id)),
     sizeEdits: Object.fromEntries(Object.entries(st0.sizeEdits).filter(([id]) => objIds.has(id))
       .map(([id, s]) => [id, { w: num(s?.w, 0.05, 5), d: num(s?.d, 0.05, 5), h: num(s?.h, 0.01, 3) }])),
+    moved: Object.fromEntries(Object.entries(st0.moved ?? {}).filter(([id]) => objIds.has(id))
+      .map(([id, m]) => [id, { x: num(m?.x, -10, 10), z: num(m?.z, -10, 10), yaw: num(m?.yaw, -7, 7) }])),
     taste: st0.taste, list: st0.list.filter((id) => pm.has(id)),
   };
+  const room = withMoves(scanned, state); // furniture where the user dragged it
   const cards: Card[] = [];
   const objectById = (id?: string) => room.objects.find((o) => o.id === id);
   // Desk lamps go on the desk unless the user said otherwise.

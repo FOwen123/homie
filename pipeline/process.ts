@@ -28,6 +28,7 @@ await cp(join(work, "kf"), join(bundle, "keyframes"), { recursive: true });
 await step("furniture parts + finishes (Muse)", () => $`bun ${join(import.meta.dir, "parts.ts")} ${bundle}`.quiet());
 await step("judge: blocks vs real frames (Muse)", () => $`bun ${join(import.meta.dir, "judge.ts")} ${bundle}`.quiet());
 await step("re-square after the judge's moves", () => py("layout.py", bundle));
+await step("full-resolution photos for the Real view", () => py("photos.py", capture, bundle));
 if (!process.argv.includes("--no-splat")) {
   await step("splat dataset", () => $`uv run -q --with numpy python ${join(import.meta.dir, "splat_dataset.py")} ${capture} ${join(work, "splat_ds")} 10 960`.quiet());
   await step("splat fit (msplat)", () =>

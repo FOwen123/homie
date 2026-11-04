@@ -3,7 +3,7 @@ import Foundation
 /// Uploads a finished capture to the Roomie website and follows processing until the room page is live.
 @MainActor
 final class Uploader: ObservableObject {
-    static let site = URL(string: "https://roomie-9v2.pages.dev")!
+    static let site = URL(string: "https://roomie-tw.pages.dev")!
     enum Phase: Equatable { case idle, uploading, processing(String), done(URL), failed(String) }
     @Published var phase: Phase = .idle
 

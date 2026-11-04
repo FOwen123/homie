@@ -41,7 +41,7 @@ async function work() {
       await rm(join(bundle, ".work"), { recursive: true, force: true });
       job.state = "publishing";
       await $`bun run build`.cwd(join(ROOT, "web")).quiet();
-      await $`bunx wrangler pages deploy dist --project-name roomie --branch main --commit-dirty=true`.cwd(join(ROOT, "web")).quiet();
+      await $`bunx wrangler pages deploy dist --project-name roomie-tw --branch main --commit-dirty=true`.cwd(join(ROOT, "web")).quiet();
       job.state = "done";
       job.url = `/room/${id}`;
     } catch (e: any) {
