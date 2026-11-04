@@ -4,15 +4,30 @@
 import type { Keyframe, Placement, Product, Room } from "../../src/lib/types";
 import { type Env, json, loadCatalog, loadRoom, meta, underLimit } from "../_lib";
 
-function project(k: Keyframe, p: [number, number, number]) {
+const NEAR = 0.2; // m in front of the camera
+/** Room point → camera coordinates (ARKit: the camera looks down -z). */
+function toCam(k: Keyframe, p: number[]) {
   const M = k.cam_to_room; // camera → room, row-major; invert the rigid transform
-  const R = [[M[0][0], M[0][1], M[0][2]], [M[1][0], M[1][1], M[1][2]], [M[2][0], M[2][1], M[2][2]]];
   const d = [p[0] - M[0][3], p[1] - M[1][3], p[2] - M[2][3]];
-  const c = [0, 1, 2].map((i) => R[0][i] * d[0] + R[1][i] * d[1] + R[2][i] * d[2]); // Rᵀ·d
-  const z = -c[2]; // ARKit cameras look down -z
-  if (z < 0.2) return null;
-  // keyframes are the sensor image rotated 90° clockwise, so camera y maps to image x (see pipeline/room.py)
-  return { x: k.fx * (c[1] / z) + k.cx, y: k.fy * (c[0] / z) + k.cy, z };
+  return [0, 1, 2].map((i) => M[0][i] * d[0] + M[1][i] * d[1] + M[2][i] * d[2]); // Rᵀ·d
+}
+// keyframes are the sensor image rotated 90° clockwise, so camera y maps to image x (see pipeline/room.py)
+const toPixel = (k: Keyframe, c: number[]) => ({ x: (k.fx * c[1]) / -c[2] + k.cx, y: (k.fy * c[0]) / -c[2] + k.cy });
+
+/** The box's outline in the image: corners in front of the camera, plus where its edges cross the near plane
+ *  (a big rug around the camera is partly behind it; dropping those corners alone would shrink it to a sliver). */
+function outlinePixels(k: Keyframe, pts: number[][]) {
+  const cs = pts.map((p) => toCam(k, p)), out: { x: number; y: number }[] = [];
+  cs.forEach((c) => { if (-c[2] >= NEAR) out.push(toPixel(k, c)); });
+  for (let a = 0; a < 8; a++) for (const bit of [1, 2, 4]) {
+    const b = a | bit;
+    if (b === a) continue; // corners a and b differ in one bit: an edge of the box
+    const za = -cs[a][2], zb = -cs[b][2];
+    if ((za >= NEAR) === (zb >= NEAR)) continue;
+    const t = (NEAR - za) / (zb - za);
+    out.push(toPixel(k, cs[a].map((v, i) => v + t * (cs[b][i] - v))));
+  }
+  return out;
 }
 
 function bestView(room: Room, pl: Placement, pr: Product) {
@@ -25,14 +40,14 @@ function bestView(room: Room, pl: Placement, pr: Product) {
   }
   let best: { k: Keyframe; box: number[]; score: number } | null = null;
   for (const k of room.keyframes) {
-    const q = pts.map((p) => project(k, p)).filter((v) => !!v);
-    if (q.length < 4) continue; // half its corners in front of the camera (a big rug never has all of them)
+    const q = outlinePixels(k, pts);
+    if (q.length < 3) continue; // entirely behind the camera
     const xs = q.map((v) => v.x), ys = q.map((v) => v.y);
     const whole = (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys));
     const box = [Math.max(0, Math.min(...xs)), Math.max(0, Math.min(...ys)), Math.min(k.w, Math.max(...xs)), Math.min(k.h, Math.max(...ys))];
     const shown = box[2] > box[0] && box[3] > box[1] ? ((box[2] - box[0]) * (box[3] - box[1])) / whole : 0;
-    if (shown < 0.35) continue; // enough of its spot in the frame: a big rug, or a spot near the camera, is rarely whole
     const area = ((box[2] - box[0]) * (box[3] - box[1])) / (k.w * k.h);
+    if (shown < 0.35 && area < 0.15) continue; // enough of the spot in frame, or a big part of the frame (a rug around the camera)
     const score = Math.min(area, 0.25) * shown - Math.abs((box[0] + box[2]) / 2 / k.w - 0.5) * 0.1; // big, whole, roughly centred
     if (!best || score > best.score) best = { k, box, score };
   }

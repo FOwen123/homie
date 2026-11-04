@@ -175,8 +175,11 @@ export function keepLocal(sent: RoomState, cur: RoomState, out: RoomState): Room
     .filter((p) => (sentIds.has(p.id) ? curIds.has(p.id) : curIds.has(p.id) || !dropped.has(p.productId)))
     .map((p) => changed.get(p.id) ?? p);
   for (const p of changed.values()) if (!placements.some((x) => x.id === p.id)) placements.push(p);
-  const edits = <T,>(a: Record<string, T> = {}, b: Record<string, T> = {}, o: Record<string, T> = {}) =>
-    ({ ...o, ...Object.fromEntries(Object.entries(b).filter(([k, v]) => a[k] !== v)) });
+  const edits = <T,>(a: Record<string, T> = {}, b: Record<string, T> = {}, o: Record<string, T> = {}) => {
+    const r = { ...o, ...Object.fromEntries(Object.entries(b).filter(([k, v]) => a[k] !== v)) };
+    for (const k of Object.keys(a)) if (!(k in b)) delete r[k]; // taken back (undo) while waiting
+    return r;
+  };
   const list = (s: string[], c: string[], o: string[]) => [...new Set([...o.filter((x) => !s.includes(x) || c.includes(x)), ...c.filter((x) => !s.includes(x))])];
   return { ...out, placements, moved: edits(sent.moved, cur.moved, out.moved), sizeEdits: edits(sent.sizeEdits, cur.sizeEdits, out.sizeEdits),
     list: list(sent.list, cur.list, out.list), removed: list(sent.removed, cur.removed, out.removed) };
