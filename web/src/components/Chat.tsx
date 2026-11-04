@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { checkFit } from "../lib/fit";
-import { LangContext, useLang, useT } from "../lib/i18n";
-import type { Card, ChatTurn, Placement, Product, Room, RoomState } from "../lib/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { checkFit, findSpot } from "../lib/fit";
+import { LABEL_ZH, LangContext, useLang, useT } from "../lib/i18n";
+import type { Card, ChatTurn, FitResult, Placement, Product, Room, RoomState } from "../lib/types";
 import { ProductCard, ntd } from "./bits";
 
 type Props = {
@@ -172,6 +172,43 @@ export function ShoppingList({ state, setState, products, t }: { state: RoomStat
         <span className="text-[15px] text-graphite">{t("total")}</span>
         <span className="num font-display text-[24px]">{ntd(total)}</span>
       </div>
+    </div>
+  );
+}
+
+const NO_SPOT: FitResult = { status: "no", clearance_cm: null, reason_en: "No free spot in your room", reason_zh: "房間裡沒有空位放" };
+
+/** Every product in the catalog, grouped by category, each checked against this room (best spot first). */
+export function ShopAll({ room, state, setState, products, onFocus }: Omit<Props, "roomId" | "turns" | "setTurns">) {
+  const t = useT();
+  const { lang } = useLang();
+  const groups = useMemo(() => {
+    const desk = room.objects.find((o) => o.label === "desk" && !state.removed.includes(o.id));
+    const rank = { yes: 0, check: 1, no: 2 };
+    const rows = [...products.values()].map((product) => {
+      const placement = state.placements.find((p) => p.productId === product.id);
+      const spot = placement ?? findSpot(room, state, products, product.id, product.category === "lamp" ? desk : undefined);
+      return { product, placement, fit: spot ? checkFit(room, state, products, spot) : NO_SPOT };
+    }).sort((a, b) => rank[a.fit.status] - rank[b.fit.status] || a.product.price - b.product.price);
+    const by = new Map<string, typeof rows>();
+    for (const r of rows) by.set(r.product.category, [...(by.get(r.product.category) ?? []), r]);
+    return [...by];
+  }, [room, state, products]);
+  return (
+    <div className="h-full space-y-5 overflow-y-auto px-4 pt-4 pb-6">
+      {groups.map(([cat, rows]) => (
+        <section key={cat}>
+          <h3 className="mb-2 text-[17px]">{lang === "zh" ? LABEL_ZH[cat] ?? cat : cat[0].toUpperCase() + cat.slice(1)} <span className="num text-fog">{rows.length}</span></h3>
+          <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1">
+            {rows.map(({ product, placement, fit }) => (
+              <ProductCard key={product.id} product={product} fit={fit} inList={state.list.includes(product.id)}
+                onAdd={() => setState({ ...state, list: [...state.list, product.id] })}
+                onShow={() => placement ? onFocus(placement.id) : window.dispatchEvent(new CustomEvent("roomie:place", { detail: product.id }))} />
+            ))}
+          </div>
+        </section>
+      ))}
+      {!groups.length && <p className="text-[15px] text-fog">{t("thinking")}</p>}
     </div>
   );
 }

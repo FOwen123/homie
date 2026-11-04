@@ -176,18 +176,28 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
         const s = fwd.dot(pos.clone().setY(0).negate().normalize()) - pos.clone().setY(0).length() * 0.3;
         if (s > score) { score = s; best = k; }
       }
+      // the splat is only sharp from where the phone was: use its exact pose and lens, and look around in place
       const M = best.cam_to_room;
       const pos = new THREE.Vector3(M[0][3], M[1][3], M[2][3]);
-      const fwd = new THREE.Vector3(-M[0][2], 0, -M[2][2]).normalize();
+      const fwd = new THREE.Vector3(-M[0][2], -M[1][2], -M[2][2]).normalize();
+      camera.fov = (2 * Math.atan(best.h / 2 / best.fy) * 180) / Math.PI;
+      camera.updateProjectionMatrix();
       camera.position.copy(pos);
-      controls.target.copy(pos).addScaledVector(fwd, 0.6);
-      controls.minDistance = 0.3;
+      controls.target.copy(pos).addScaledVector(fwd, 0.05);
+      controls.minDistance = controls.maxDistance = 0.05;
+      controls.enableZoom = controls.enablePan = false;
+      controls.maxPolarAngle = Math.PI;
       controls.update();
     };
     let lastMode: ViewMode = "blocks";
     const home = () => {
       if (live.current.mode === "real") return inside();
       const r = Math.max(room.shell.width, room.shell.depth);
+      camera.fov = 50;
+      camera.updateProjectionMatrix();
+      controls.enableZoom = controls.enablePan = true;
+      controls.maxPolarAngle = Math.PI / 2.05;
+      controls.maxDistance = 14;
       controls.minDistance = 1.2;
       camera.position.set(r * 0.9, r * 1.25, r * 1.1);
       controls.target.set(0, 0.6, 0);

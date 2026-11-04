@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Chat, ShoppingList, freshPhotos, photoKey } from "./components/Chat";
+import { Chat, ShopAll, ShoppingList, freshPhotos, photoKey } from "./components/Chat";
 import { RoomViewer, type ViewMode } from "./components/RoomViewer";
 import { MeasureChip, dims } from "./components/bits";
 import { findSpot, productMap } from "./lib/fit";
@@ -70,7 +70,7 @@ function RoomPage({ id }: { id: string }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [label, setLabel] = useState<{ x: number; y: number } | null>(null);
   const [resetKey, setResetKey] = useState(0);
-  const [tab, setTab] = useState<"chat" | "list">("chat");
+  const [tab, setTab] = useState<"chat" | "shop" | "list">("chat");
   const [editing, setEditing] = useState(false);
   const products = useMemo(() => productMap(catalog), [catalog]);
 
@@ -90,6 +90,7 @@ function RoomPage({ id }: { id: string }) {
       setSelected(spot.id);
       freshPhotos.add(photoKey(spot));
       setTurns([...turns, { role: "assistant", text: "", cards: [{ type: "photo", placementId: spot.id, productId: spot.productId }] }]);
+      setTab("chat"); // the photo appears in the chat
     };
     window.addEventListener("roomie:place", h);
     return () => window.removeEventListener("roomie:place", h);
@@ -138,15 +139,16 @@ function RoomPage({ id }: { id: string }) {
       </section>
       <aside className="flex min-h-0 flex-1 flex-col md:w-[440px] md:flex-none md:py-6 md:pr-6">
         <div className="flex gap-1 px-4 pt-1 md:px-1">
-          {(["chat", "list"] as const).map((k) => (
+          {(["chat", "shop", "list"] as const).map((k) => (
             <button key={k} onClick={() => setTab(k)} className={`min-h-10 rounded-full px-4 text-[14px] ${tab === k ? "bg-bone-white text-ink" : "text-graphite"}`}>
-              {k === "chat" ? "Roomie" : `${t("list")} (${state.list.length})`}
+              {k === "chat" ? "Roomie" : k === "shop" ? `${t("shop")} (${catalog.length})` : `${t("list")} (${state.list.length})`}
             </button>
           ))}
         </div>
         <div className="min-h-0 flex-1">
           {tab === "chat"
             ? <Chat roomId={id} room={room} state={state} setState={setState} products={products} turns={turns} setTurns={setTurns} onFocus={setSelected} />
+            : tab === "shop" ? <ShopAll room={room} state={state} setState={setState} products={products} onFocus={setSelected} />
             : <div className="p-4"><ShoppingList state={state} setState={setState} products={products} t={t} /></div>}
         </div>
       </aside>
