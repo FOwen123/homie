@@ -169,7 +169,11 @@ export function keepLocal(sent: RoomState, cur: RoomState, out: RoomState): Room
   const ids = (l: { id: string }[]) => new Set(l.map((p) => p.id));
   const sentIds = ids(sent.placements), curIds = ids(cur.placements);
   const changed = new Map(cur.placements.filter((p) => !sentIds.has(p.id) || !sent.placements.includes(p)).map((p) => [p.id, p]));
-  const placements = out.placements.filter((p) => !sentIds.has(p.id) || curIds.has(p.id)).map((p) => changed.get(p.id) ?? p);
+  // products the user took out while waiting stay out, even if the agent re-placed them under a new id
+  const dropped = new Set(sent.placements.filter((p) => !curIds.has(p.id)).map((p) => p.productId));
+  const placements = out.placements
+    .filter((p) => (sentIds.has(p.id) ? curIds.has(p.id) : curIds.has(p.id) || !dropped.has(p.productId)))
+    .map((p) => changed.get(p.id) ?? p);
   for (const p of changed.values()) if (!placements.some((x) => x.id === p.id)) placements.push(p);
   const edits = <T,>(a: Record<string, T> = {}, b: Record<string, T> = {}, o: Record<string, T> = {}) =>
     ({ ...o, ...Object.fromEntries(Object.entries(b).filter(([k, v]) => a[k] !== v)) });
