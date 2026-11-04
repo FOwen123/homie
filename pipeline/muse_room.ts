@@ -71,8 +71,9 @@ for (const [i, k] of kfNames.entries()) {
   content.push({ type: "text", text: `frame ${i}` }, { type: "image_url", image_url: { url: await dataUrl(small) } });
   await $`rm -f ${small}`;
 }
-// low: ~1.5 min, demo room +17% / −7%; medium ~3 min, +24% / +11%; high 4.5-9 min, +20% / +9%
-const plan = await chatJSON(MODEL, content, SCHEMA, "room", 2, process.env.ROOM_EFFORT ?? "low");
+// medium: 3-6 min, pieces nearly all on the right walls (demo room: like high, which takes 4.5-9 min); low ~1.5 min
+// put the desk and AC on wrong walls; minimal (35 s) misplaced the bed, wardrobe and fridge. Room size ±20% for all.
+const plan = await chatJSON(MODEL, content, SCHEMA, "room", 2, process.env.ROOM_EFFORT ?? "medium");
 await Bun.write(join(bundle, ".plan.json"), JSON.stringify(plan, null, 1)); // Muse's raw answer, for debugging (never served)
 
 // Room coordinates: x to the right when facing wall A, z away from A, y up; A at z = -D/2, B at x = +W/2.
