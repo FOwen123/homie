@@ -251,9 +251,11 @@ function RoomPage({ id }: { id: string }) {
   useEffect(() => {
     // Uploaded rooms: poll the build status every 3 s and re-read room.json each time, so pieces appear as the
     // builders finish; "done" is the processor's word, not room.json's. The demo room is static.
-    const live = { alive: true, timer: 0 };
+    const live = { alive: true, timer: 0, last: "" };
     const show = (r: Room | null) => {
-      if (r && (r.judge || (r.objects?.length && r.keyframes?.length))) setRoom(r); // partial rooms wait for objects and keyframes
+      const key = JSON.stringify(r);
+      if (key === live.last) return; // unchanged since the last poll
+      if (r && (r.judge || (r.objects?.length && r.keyframes?.length))) { live.last = key; setRoom(r); } // partial rooms wait for objects and keyframes
     };
     const again = () => { live.timer = window.setTimeout(tick, 3000); };
     const tick = async () => {

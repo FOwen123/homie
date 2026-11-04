@@ -158,7 +158,8 @@ def process(rid: str, kind: str):
         set_status(rid, state="failed", error=str(e)[-300:])
     finally:
         # raw uploads and everything made from them (frames, MapAnything points, masks) never outlive processing
-        for d in (cap, Path("/tmp") / rid, bundle / ".work"):
+        # (builders and the judge keep their photo comparisons in /tmp/homie-build and /tmp/roomie-judge)
+        for d in (cap, Path("/tmp") / rid, bundle / ".work", Path("/tmp/homie-build") / rid, Path("/tmp/roomie-judge") / rid):
             shutil.rmtree(d, ignore_errors=True)
         data.commit()
 
@@ -193,10 +194,9 @@ def web():
     def new_room():
         """Reserve one of today's slots and a fresh room id, or None when today's uploads are used up."""
         day = time.strftime("%Y-%m-%d")
-        n = status.get(f"day:{day}", 0)
-        if n >= DAILY_MAX:
+        # numbered slots, each taken atomically, so two containers can't both get the last one
+        if not any(status.put(f"day:{day}:{k}", 1, skip_if_exists=True) for k in range(DAILY_MAX)):
             return None
-        status[f"day:{day}"] = n + 1
         rid = f"r{int(time.time() * 1000):x}{os.urandom(3).hex()}"
         (Path("/data/uploads") / rid).mkdir(parents=True, exist_ok=True)
         status[rid] = {"state": "queued"}
