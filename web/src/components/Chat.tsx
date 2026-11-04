@@ -66,13 +66,13 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 space-y-3 overflow-y-auto px-4 pt-4 pb-2">
+      <div className="flex-1 space-y-4 overflow-y-auto px-4 pt-5 pb-3">
         {turns.map((m, i) => (
           <div key={i} className="rise space-y-3">
             {(m.text || m.image) && (
               <div className={`flex items-start gap-2.5 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                 {m.role === "assistant" && <Avatar />}
-                <div className={`max-w-[85%] rounded-[22px] px-4 py-3 text-[17px] leading-[1.45] ${m.role === "user" ? "rounded-br-md bg-charcoal text-paper-white" : "rounded-tl-md bg-paper"}`}>
+                <div className={`max-w-[85%] whitespace-pre-line rounded-[22px] px-4 py-3 text-[17px] leading-[1.45] ${m.role === "user" ? "rounded-br-md bg-charcoal text-paper-white" : "rounded-tl-md bg-paper"}`}>
                   {m.image && <img src={m.image} alt="" className="mb-2 max-h-48 rounded-2xl" />}
                   {m.text}
                 </div>
@@ -82,16 +82,20 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
           </div>
         ))}
         {busy && <div className="flex items-center gap-2 text-[15px] text-fog"><span className="pulse-dot h-2 w-2 rounded-full bg-powder-blue" />{t("thinking")}</div>}
-        {chips.length > 0 && !busy && (
-          <div className="flex flex-wrap gap-2">
-            {chips.map((k) => (
-              <button key={k} onClick={() => send(t(k))} className="min-h-11 rounded-full bg-paper px-4 text-[15px]">{t(k)}</button>
-            ))}
-          </div>
-        )}
         <div ref={end} />
       </div>
-      <form onSubmit={(e) => { e.preventDefault(); void send(text); }} className="m-3 flex items-end gap-2 rounded-[28px] border border-ink/14 bg-paper-white p-1.5 md:m-4">
+      {chips.length > 0 && !busy && (
+        // one swipeable row just above the composer, fading at the right edge so it reads as scrollable
+        <div role="group" aria-label={t("suggestions")}
+          className="flex snap-x gap-2 overflow-x-auto px-4 pt-1 [mask-image:linear-gradient(to_right,black_calc(100%-28px),transparent)] [scrollbar-width:none] md:px-5">
+          {chips.map((k) => (
+            <button key={k} onClick={() => send(t(k))}
+              className="min-h-10 shrink-0 snap-start whitespace-nowrap rounded-full border border-ink/10 bg-paper px-4 text-[14px] text-ink hover:bg-sand">{t(k)}</button>
+          ))}
+          <span aria-hidden className="w-2 shrink-0" />
+        </div>
+      )}
+      <form onSubmit={(e) => { e.preventDefault(); void send(text); }} className="m-3 mt-2 flex items-end gap-2 rounded-[28px] border border-ink/14 bg-paper-white p-1.5 md:m-4 md:mt-2">
         <label className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-full text-graphite" title="photo">
           <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) setImage(await shrink(f)); e.target.value = ""; }} />
           {image ? <img src={image} alt="" className="h-9 w-9 rounded-full object-cover" /> : (
@@ -180,24 +184,37 @@ export function PhotoCard({ roomId, placement }: { roomId: string; placement?: P
 }
 
 export function ShoppingList({ state, setState, products, t }: { state: RoomState; setState: React.Dispatch<React.SetStateAction<RoomState>>; products: Map<string, Product>; t: ReturnType<typeof useT> }) {
+  const [opened, setOpened] = useState<string[]>([]); // checkout opens one Shopee page per tap (browsers block several at once)
   const items = state.list.map((id) => products.get(id)).filter((p): p is Product => !!p);
   const total = items.reduce((s, p) => s + p.price, 0);
   if (!items.length) return <p className="rounded-[24px] bg-paper p-4 text-[15px] text-fog">{t("empty")}</p>;
+  const next = items.find((p) => !opened.includes(p.id));
+  const open = (id: string) => setOpened((o) => (o.includes(id) ? o : [...o, id]));
   return (
     <div className="rounded-[24px] bg-paper p-4">
-      <h3 className="mb-2 text-[20px]">{t("list")}</h3>
+      <h3 className="mb-2 text-[20px]">{t("list")} <span className="num text-[15px] text-fog">{items.length}</span></h3>
       {items.map((p) => (
         <div key={p.id} className="flex items-center gap-3 border-b border-ink/6 py-2 last:border-0">
           <img src={p.image} alt="" referrerPolicy="no-referrer" className="h-12 w-12 rounded-xl bg-mist-gray object-contain" />
-          <a href={p.url} target="_blank" rel="noreferrer" className="line-clamp-2 flex-1 text-[14px] text-ink underline decoration-iris/40">{p.title}</a>
+          <div className="min-w-0 flex-1">
+            <p className="line-clamp-2 text-[14px] text-ink">{p.title}</p>
+            <a href={p.url} target="_blank" rel="noreferrer" onClick={() => open(p.id)} className="text-[13px] text-graphite underline decoration-iris/40">
+              {opened.includes(p.id) ? `✓ ${t("openedShopee")}` : t("openShopee")}
+            </a>
+          </div>
           <span className="num text-[15px]">{ntd(p.price)}</span>
-          <button onClick={() => setState({ ...state, list: state.list.filter((x) => x !== p.id) })} className="min-h-11 px-2 text-[13px] text-fog">{t("remove")}</button>
+          <button onClick={() => setState({ ...state, list: state.list.filter((x) => x !== p.id) })} aria-label={`${t("remove")} ${p.title}`} className="grid h-11 w-9 place-items-center text-fog">✕</button>
         </div>
       ))}
       <div className="mt-3 flex items-baseline justify-between">
         <span className="text-[15px] text-graphite">{t("total")}</span>
         <span className="num text-[24px]">{ntd(total)}</span>
       </div>
+      <a href={(next ?? items[0]).url} target="_blank" rel="noreferrer" onClick={() => next && open(next.id)}
+        className="mt-3 flex min-h-12 w-full items-center justify-center rounded-full bg-charcoal px-6 text-[16px] text-paper-white shadow-button">
+        {!next ? t("checkoutDone") : opened.length ? `${t("checkoutNext")} ${opened.length + 1}/${items.length}` : `${t("checkout")} (${items.length})`}
+      </a>
+      <p className="mt-2 text-[13px] text-fog">{t("checkoutNote")}</p>
     </div>
   );
 }
@@ -224,7 +241,7 @@ export function ShopAll({ room, state, setState, products, onFocus, swap, onClea
     return [...by];
   }, [room, state, products, swap]);
   return (
-    <div className="h-full space-y-5 overflow-y-auto px-4 pt-4 pb-6">
+    <div className="space-y-5 px-4 pt-4 pb-6">
       {swap && (
         <div className="flex items-center justify-between gap-2 rounded-[24px] bg-paper p-4">
           <p className="text-[15px]">{t("swapFor")} <b>{name(swap.label)}</b> <span className="num text-fog">≈ {dims(state.sizeEdits[swap.id] ?? swap.size)}</span>

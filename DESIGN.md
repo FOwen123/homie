@@ -117,12 +117,12 @@ White, 22px radius, 1px ink border at 10%, 10px padding, 216px wide. Top: produc
 
 ### 5.5 Chat
 - **Panel:** white, 28px radius, 520px wide on desktop. On phones it is a sheet under the 3D view with a 28px top radius.
-- **Tabs:** text tabs (Chat / Products / List) with a 2px ink underline under the current one; counts in mono.
+- **Tabs:** text tabs (Chat / Shop) with a 2px ink underline under the current one; the Shop tab shows the list count in mono. Shop holds the shopping list (with checkout) on top and every product that fits below.
 - **Engine message:** Paper bubble, 22px radius (6px top-left, next to Homie's avatar: the house mark on a 28px ink circle), body-lg Ink, max width 85%.
 - **User message:** Charcoal bubble, white text, right-aligned, 6px bottom-right corner.
 - **Rich messages** (product carousel, photo preview, list) break out of the bubble to full width.
 - **Composer:** pill input with a 1px ink border at 14%, camera button for inspiration photos, round Charcoal send button with an up arrow.
-- **Quick replies** (first visit only): Paper pill chips.
+- **Quick replies:** one horizontal, swipeable row of Paper pill chips just above the composer, fading at the right edge; first-visit questions, then follow-ups that fit the last reply.
 
 ### 5.6 Processing progress
 Vertical list of the 5 steps from `PLAN.md` §5 (frames → scale → 3D → objects → sizes). Done: Ink text + Iris check. Current: Ink + a soft pulsing Powder Blue dot. Waiting: Fog. A thin Powder Blue track with an Iris fill sits on top. Show the latest keyframe thumbnail beside it so the wait feels like progress.
@@ -135,7 +135,7 @@ Partly seen sizes never block the user and never trigger a question. They use th
 - Room mesh in its real colors. Selected object gets an Iris outline; proposed products appear at true size with an Iris outline until accepted.
 - **Dimension lines** (Overview only): 1px Iris lines for the room's width (near floor edge), depth (side floor edge) and height (far corner), with extension lines and end ticks, each labelled by a white pill with an Iris border and the value in mono cm. This is the "single bold pen stroke". A label that would fall under the move buttons hides.
 - Two views in a segmented control (white pill, the current view on a Paper pill): bottom-right on desktop, top-left on phones. **Overview** (俯視, dollhouse from above) and **Walk in** (走進去, first person at 1.55 m eye height, starting just inside the door). Realism comes from Muse Image photos, not a third view.
-- A slim move strip on the right edge, the same in both views: forward/back (zoom in/out in Overview), turn left/right, reset.
+- A slim move strip on the right edge, the same in both views: forward/back (zoom in/out in Overview), turn left/right, reset, and **Light**: a bulb with a three-axis gizmo (like Blender) that moves the light, so the shadows follow, plus a brightness slider (top-right on desktop, bottom on phones).
 - Undo (復原) sits bottom-left once anything changed, above the keyboard hint; Ctrl+Z / ⌘Z does the same. Press and hold to keep moving; each button has a label for screen readers.
 - Keyboard: the view takes focus (Tab) and shows the iris focus ring. Arrow keys or WASD move and turn.
 - Drag to look or orbit, two fingers pan and zoom in Overview.
@@ -147,7 +147,7 @@ A frame from the user's video with the edited furniture, 24px radius, full width
 Sand tiles, 24px radius, for style words ("北歐 Nordic", "原木 Natural wood"). Uploaded inspiration photos sit in a 3-column grid of 16px-radius thumbnails. No more than two pastel washes in one view.
 
 ### 5.11 Shopping list
-Paper card. One row per pick: thumbnail, name, NT$ price (right-aligned, tabular), Shopee link. Group rows by shop. A sticky footer shows the total `NT$ 12,860` (heading) and delivery and assembly notes in body-sm Graphite.
+Paper card at the top of the Shop tab. One row per pick: thumbnail, name, NT$ price (right-aligned, tabular), Shopee link. A primary "Check out on Shopee" button opens one item per tap (browsers block several tabs at once) and counts through them ("Next item 2/3"); payment happens on Shopee. Group rows by shop. A sticky footer shows the total `NT$ 12,860` (heading) and delivery and assembly notes in body-sm Graphite.
 
 ## 6. Imagery
 
