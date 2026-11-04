@@ -5,7 +5,7 @@ import type { Card, ChatTurn, FitResult, Placement, Product, Room, RoomObject, R
 import { ProductCard, dims, ntd } from "./bits";
 
 type Props = {
-  roomId: string; room: Room; state: RoomState; setState: (s: RoomState) => void; products: Map<string, Product>;
+  roomId: string; room: Room; state: RoomState; setState: React.Dispatch<React.SetStateAction<RoomState>>; products: Map<string, Product>;
   turns: ChatTurn[]; setTurns: (t: ChatTurn[]) => void; onFocus: (id: string) => void; selected?: string | null;
 };
 /** Put a product in the room (App listens): swapped in for `replace`, or on a free spot. */
@@ -39,7 +39,14 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
         body: JSON.stringify({ roomId, lang, messages: next.map(({ role, text, image }) => ({ role, text, image })), state, selected }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error === "busy" ? t("busy") : j.error);
-      setState(j.state);
+      // the reply carries the state as it was sent: keep anything the user moved while waiting
+      setState((cur) => {
+        const out: RoomState = j.state, sent = state;
+        const moved = { ...out.moved };
+        for (const [id, m] of Object.entries(cur.moved ?? {})) if (m !== sent.moved?.[id]) moved[id] = m;
+        const mine = new Map(cur.placements.filter((p) => { const s = sent.placements.find((x) => x.id === p.id); return s && s !== p; }).map((p) => [p.id, p]));
+        return { ...out, moved, placements: out.placements.map((p) => (mine.has(p.id) ? { ...p, x: mine.get(p.id)!.x, z: mine.get(p.id)!.z, yaw: mine.get(p.id)!.yaw } : p)) };
+      });
       const placed = j.state.placements.at(-1) as Placement | undefined;
       if (placed && placed.id !== state.placements.at(-1)?.id) onFocus(placed.id);
       for (const c of j.cards as Card[]) {
@@ -157,7 +164,7 @@ export function PhotoCard({ roomId, placement }: { roomId: string; placement?: P
   );
 }
 
-export function ShoppingList({ state, setState, products, t }: { state: RoomState; setState: (s: RoomState) => void; products: Map<string, Product>; t: ReturnType<typeof useT> }) {
+export function ShoppingList({ state, setState, products, t }: { state: RoomState; setState: React.Dispatch<React.SetStateAction<RoomState>>; products: Map<string, Product>; t: ReturnType<typeof useT> }) {
   const items = state.list.map((id) => products.get(id)).filter((p): p is Product => !!p);
   const total = items.reduce((s, p) => s + p.price, 0);
   if (!items.length) return <p className="rounded-[24px] bg-paper-white p-4 text-[15px] text-fog">{t("empty")}</p>;

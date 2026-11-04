@@ -164,7 +164,8 @@ export const moveIn = (state: RoomState, id: string, pose: Pose): RoomState => s
   ? { ...state, placements: state.placements.map((p) => (p.id === id ? { ...p, ...pose } : p)) }
   : { ...state, moved: { ...state.moved, [id]: pose } };
 
-/** What a moved piece now runs into: "wall", another piece's label, or null. `room` has the moves applied. */
+/** What a moved piece now runs into: "wall", "door-zone" (the 60 cm in front of the door), another piece's
+ *  label, or null. `room` has the moves applied. */
 export function collision(room: Room, state: RoomState, products: Map<string, Product>, id: string): string | null {
   const all = [...objectBoxes(room, state), ...placementBoxes(state, products)];
   const me = all.find((b) => b.id === id);
@@ -172,9 +173,9 @@ export function collision(room: Room, state: RoomState, products: Map<string, Pr
   const hw = room.shell.width / 2, hd = room.shell.depth / 2;
   if (Math.min(...corners(me).map(([x, z]) => Math.min(hw - Math.abs(x), hd - Math.abs(z)))) < -0.03) return "wall";
   const flat = (b: Box) => b.y1 - b.y0 <= 0.03; // rugs lie under furniture
-  for (const o of all) {
+  for (const o of [...all, ...doorZones(room)]) {
     if (o.id === id || flat(o) || flat(me) || me.y0 >= o.y1 - 0.02 || o.y0 >= me.y1 - 0.02) continue;
-    if (gap(me, o) < -0.02) return o.label;
+    if (gap(me, o) < -0.02) return o.id === "door-zone" ? o.id : o.label;
   }
   return null;
 }

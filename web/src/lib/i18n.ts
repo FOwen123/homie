@@ -28,6 +28,7 @@ const T = {
   moveCloser: { zh: "往前拉 5 公分", en: "5 cm closer" },
   hits: { zh: "會撞到", en: "Hits" },
   theWall: { zh: "牆", en: "the wall" },
+  blocksDoor: { zh: "擋到開門", en: "Blocks the door" },
   fitsHere: { zh: "這裡放得下", en: "Fits here" },
   zoomIn: { zh: "拉近", en: "Zoom in" },
   zoomOut: { zh: "拉遠", en: "Zoom out" },
