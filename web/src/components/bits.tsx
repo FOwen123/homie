@@ -42,7 +42,10 @@ export function ProductCard({ product, fit, inList, onShow, onAdd }: { product: 
         </span>
       )}
       <FitBadge fit={fit} />
-      {product.shop && <p className="text-[13px] text-fog">{product.shop}{product.rating ? ` · ★ ${product.rating.toFixed(1)}` : ""}</p>}
+      <p className="text-[13px] text-fog">
+        {[product.rating && `★ ${product.rating.toFixed(1)}`, product.reviews && `${product.reviews.toLocaleString("en-US")} ${t("reviews")}`,
+          product.rank && `${t("bestSeller")} #${product.rank}`, product.shop].filter(Boolean).join(" · ")}
+      </p>
       <div className="mt-auto flex flex-wrap gap-2 pt-1">
         <button onClick={onShow} className="min-h-11 rounded-full bg-charcoal px-4 text-[15px] text-paper-white shadow-button">{t("showMe")}</button>
         <button onClick={onAdd} disabled={inList} className="min-h-11 rounded-full border border-ink/12 bg-bone-white px-4 text-[15px] disabled:text-fog">
