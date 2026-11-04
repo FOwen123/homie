@@ -18,7 +18,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 cap, seg, out = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
 CELL = 0.02          # grid step on planes, meters
-KF_STEP = 50         # keyframe kNN = video frame (NN-1)*50 (see AGENTS.md capture format)
+KF_STEP = json.loads((cap / "meta.json").read_text()).get("keyframe_every", 50)  # keyframe kNN = video frame (NN-1)*KF_STEP
 SW, SH = 960, 1280   # upright keyframe size given to Muse/SAM
 SENSOR_H = 1440      # sensor image is 1920x1440 (landscape)
 S = SENSOR_H / SW    # upright keyframes are scaled down by this factor

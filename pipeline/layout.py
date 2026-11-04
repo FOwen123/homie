@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 
 SNAP = 0.35          # an object this close to a wall is standing against it
+SNAP_TALL = 0.5      # tall pieces (wardrobes, shelves) nearly always stand against a wall
 WALL_MOUNTED = {"air conditioner", "curtain"}
 GAP = 0.01           # leave 1 cm so blocks don't z-fight with the wall
 
@@ -33,14 +34,16 @@ def clamp(o):
     c[2] = float(np.clip(c[2], -D + hz + GAP, D - hz - GAP)) if hz < D else 0.0
 
 
+NO_FRONT = {"bin", "lamp", "chair", "rug", "plant", "stool", "table", "bed", "storage box", "basket", "fan", "trash can", "air conditioner", "curtain"}
 for o in objs:
-    o["yaw"] = round(o["yaw"] / (np.pi / 2)) * np.pi / 2
+    o["yaw"] = yaw0 = round(o["yaw"] / (np.pi / 2)) * np.pi / 2
     clamp(o)
     hx, hz = half(o)
     c = o["center"]
     gaps = {"W": c[0] - hx + W, "E": W - c[0] - hx, "S": c[2] - hz + D, "N": D - c[2] - hz}
     near = min(gaps, key=gaps.get)
-    against = {k for k, g in gaps.items() if g < SNAP} | ({near} if o["label"] in WALL_MOUNTED else set())
+    snap = SNAP_TALL if o["size"]["h"] >= 1.0 else SNAP
+    against = {k for k, g in gaps.items() if g < snap} | ({near} if o["label"] in WALL_MOUNTED else set())
     for k in against:
         if k == "W" and "E" not in against: c[0] = -W + hx + GAP
         if k == "E" and "W" not in against: c[0] = W - hx - GAP
@@ -51,6 +54,17 @@ for o in objs:
     facing = {(1, 0): "E", (-1, 0): "W", (0, 1): "N", (0, -1): "S"}[(fx, fz)]
     if facing in against:
         o["yaw"] += np.pi
+    elif against and not o.get("parts") and o.get("has_front", o["label"] not in NO_FRONT):
+        # front runs along the wall (a wardrobe with its doors to the side): face away from the wall with the
+        # most open floor in front, keeping the footprint (w and d swap on a quarter turn). Only before the
+        # parts are built: on built parts a quarter turn would need a rebuild (the builder handles those).
+        away = {"W": "E", "E": "W", "S": "N", "N": "S"}
+        back = max(against, key=lambda k: gaps[away[k]])
+        if away[facing] not in against:
+            o["yaw"] = {"E": 0.5, "N": 0.0, "W": -0.5, "S": 1.0}[away[back]] * np.pi
+            s = o["size"]
+            if round(abs(o["yaw"] - yaw0) / (np.pi / 2)) % 2:
+                s["w"], s["d"] = s["d"], s["w"]
 
 # push approximate pieces out of each other (measured ones stay put); flat things like rugs are exempt
 def span(o):

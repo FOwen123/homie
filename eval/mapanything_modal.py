@@ -32,7 +32,7 @@ STEP = 2  # keep every 2nd pixel of the model's output grid
 
 
 @app.function(image=image, gpu="A100-80GB", timeout=900, volumes={"/root/.cache/huggingface": hf_cache})
-def reconstruct(jpegs: list[bytes], intrinsics: list, poses: list, model_name: str, use_inputs: bool) -> bytes:
+def reconstruct(jpegs: list[bytes], intrinsics: list, poses: list, model_name: str, use_inputs: bool, k_only: bool = False) -> bytes:
     import numpy as np
     import torch
     from PIL import Image
@@ -43,13 +43,12 @@ def reconstruct(jpegs: list[bytes], intrinsics: list, poses: list, model_name: s
     views = [{
         "img": torch.from_numpy(np.array(Image.open(io.BytesIO(b)).convert("RGB"))),
         "intrinsics": torch.tensor(K, dtype=torch.float32),
-        "camera_poses": torch.tensor(T, dtype=torch.float32),
-        "is_metric_scale": torch.tensor([True]),
+        **({} if k_only else {"camera_poses": torch.tensor(T, dtype=torch.float32), "is_metric_scale": torch.tensor([True])}),
     } for b, K, T in zip(jpegs, intrinsics, poses)]
     processed = preprocess_inputs(views)
     preds = model.infer(processed, memory_efficient_inference=True, use_amp=True, amp_dtype="bf16",
                         apply_mask=True, mask_edges=True, apply_confidence_mask=False,
-                        ignore_calibration_inputs=not use_inputs, ignore_pose_inputs=not use_inputs)
+                        ignore_calibration_inputs=not (use_inputs or k_only), ignore_pose_inputs=not use_inputs)
     print("view 0 image", tuple(processed[0]["img"].shape), "K in", processed[0]["intrinsics"][0].tolist(), "K out", preds[0]["intrinsics"][0].tolist())
     hf_cache.commit()
     out = {}
@@ -69,7 +68,9 @@ ARKIT_TO_OPENCV = [[1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0], [0, 0, 0, 1]]
 
 
 @app.local_entrypoint()
-def main(room: str = "web/public/rooms/demo", model: str = "facebook/map-anything-apache", use_inputs: bool = False):
+def main(room: str = "web/public/rooms/demo", model: str = "facebook/map-anything-apache", use_inputs: bool = False,
+         generic_k: bool = False, out: str = ""):
+    """generic_k: images plus a typical phone lens (focal 0.75 × the long side), what a browser upload could give."""
     import numpy as np
 
     bundle = Path(room)
@@ -93,9 +94,12 @@ def main(room: str = "web/public/rooms/demo", model: str = "facebook/map-anythin
     c = np.linalg.inv(T) @ np.array(k["cam_to_room"]) @ np.array([Xc, Yc, Zc, 1.0])
     assert c[2] > 0 and np.allclose((K @ (c[:3] / c[2]))[:2], [y, k["w"] - 1 - x]), "landscape pose or intrinsics are wrong"
 
+    if generic_k:
+        W, H = r["keyframes"][0]["h"], r["keyframes"][0]["w"]  # landscape
+        Ks = [[[0.75 * W, 0, W / 2], [0, 0.75 * W, H / 2], [0, 0, 1]]] * len(Ks)
     print(f"sending {len(jpegs)} keyframes to Modal…")
-    data = reconstruct.remote(jpegs, Ks, Ts, model, use_inputs)
-    out = Path("eval/out") / f"mapanything_{bundle.name}.npz"
+    data = reconstruct.remote(jpegs, Ks, Ts, model, use_inputs, generic_k)
+    out = Path(out) if out else Path("eval/out") / f"mapanything_{bundle.name}.npz"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(data)
     print(f"saved {out} ({len(data) / 1e6:.1f} MB)")

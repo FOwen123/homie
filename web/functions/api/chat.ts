@@ -6,9 +6,9 @@ import type { Card, ChatTurn, Product, Room, RoomState } from "../../src/lib/typ
 import { type Env, json, loadCatalog, loadRoom, meta, underLimit } from "../_lib";
 
 const MODEL = "muse-spark-1.3"; // standard mode: visitors' chats and photos stay out of model training
-const MAX_STEPS = 6; // room plan: search, show, add to list, reply
+const MAX_STEPS = 8; // agreed room plan: search, show, place, add to list, reply (with room to spare)
 const MAX_BODY = 1_500_000; // the client shrinks photos to ~768 px JPEG, well under this
-const MAX_OUT = 800; // output tokens per model call
+const MAX_OUT = 1200; // output tokens per model call (a 4-item plan plus reasoning fits)
 
 const tools = [
   fn("search_products", "Search the cached Shopee Taiwan catalog. Returns up to 8 products with price, size and category.", {
@@ -66,14 +66,25 @@ function describeRoom(room: Room, state: RoomState, pm: Map<string, Product>) {
 const SYSTEM = (lang: string, room: string) => `You are Homie, a friendly personal AI shopping assistant for renters in Taiwan.
 The user filmed their room; it is measured and shown in 3D next to this chat. Help them find real Shopee Taiwan products that fit, place them in the 3D room, show realistic photos, and build a shopping list.
 Rules:
-- Act with tools instead of asking questions. Ask at most one short question, and only when you can't act at all (for example no budget hint and they asked for "the best"). Never ask the user to measure anything; sizes marked approx are fine as they are.
+- Act with tools instead of asking questions, except for a general request (below). Ask at most one short question, and only when you can't act at all (for example no budget hint and they asked for "the best"). Never ask the user to measure anything; sizes marked approx are fine as they are.
 - To recommend: search_products, pick the best 1-3 for this room and taste, then show_products. Place an item with place_item when the user picks one or clearly asks to put something in the room.
 - Fit results come from code. Never claim something fits unless a tool said so. Mention approx sizes briefly when relevant.
 - Product data is in Chinese; reply in ${lang === "zh" ? "Traditional Chinese (zh-TW)" : "English"}, whatever language the product titles are in. Prices in NT$.
-- Keep replies short: 1-3 sentences. The cards show the details.
+- Keep replies short: 1-3 sentences, or one line per item in a plan. The cards show the details.
 - To replace something already in the room, pass replace_object_id to show_products (or place_item).
-- When asked what the room needs (or to plan or furnish it): compare its furniture with what a renter's room usually has (bed, desk, chair, clothes storage, shelves, desk lamp, bin, rug, nightstand) and pick the 3-4 biggest gaps for this room, taste and budget. Search each gap (call search_products for all of them at once), then show_products once per gap with your best 1-2 picks, then add_to_list the best pick of each gap that fits (fit "yes" or "check"). Reply with one short line per gap saying why the room needs it.
+- A general request (what the room still needs, a plan, a redesign, "make it cozier"): first reply with a plan only, and call no tools in that reply. Compare the furniture with what a renter's room usually has (bed, desk, chair, clothes storage, shelves, desk lamp, bin, rug, nightstand) and give the 3-4 biggest gaps for this room, taste and budget, most needed first. One line each: the item, a target max size in cm that fits the free floor (use the room size and furniture above), and a rough NT$ price. End with one line: "Shall I find the best buys for these?" If they ask to change the list, revise the plan the same way.
+- When they agree (yes, ok, go, 好, 可以 …): search_products for all items at once. Then show_products with 2-3 candidates per item to get their fit checks, place_item the best one per item that fits (fit "yes", or "check" if nothing better), and add_to_list. Choose on fit, rating and price. Reply with one short line per item saying why, then end with: "Want to see a real photo of it?"
+- Call render_photo only when they say yes to a photo or ask for one.
+- Any other request: do exactly what they ask.
 ${room}`;
+
+/** A product placed in this reply already has its own card: drop it from the candidate cards shown before. */
+function tidy(cards: Card[]) {
+  const placed = new Set(cards.flatMap((c) => (c.type === "products" ? c.items.filter((i) => i.placementId).map((i) => i.product.id) : [])));
+  return cards
+    .map((c) => (c.type === "products" && !c.items.some((i) => i.placementId) ? { ...c, items: c.items.filter((i) => !placed.has(i.product.id)) } : c))
+    .filter((c) => c.type !== "products" || c.items.length);
+}
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   // Bound what one request can cost: body size, history, text, images and the state we put in the prompt.
@@ -194,12 +205,14 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const picked = objectById(objIds.has(String(body.selected)) ? String(body.selected) : undefined); // tapped in the 3D view
   const context = describeRoom(room, state, pm) + (picked ? `\nThe user has tapped ${picked.id} (${picked.label}) in the 3D view; "this" or "it" means that object.` : "");
   const messages: any[] = [{ role: "system", content: SYSTEM(body.lang, context) }, ...history];
+  let retried = false;
   try {
     for (let step = 0; step < MAX_STEPS; step++) {
       const r = await meta(env, "/chat/completions", { model: MODEL, reasoning_effort: "low", messages, tools, max_tokens: MAX_OUT });
       const msg = r.choices[0].message;
+      if (!msg.tool_calls?.length && !msg.content?.trim() && !retried) { retried = true; continue; } // an empty turn now and then: ask again once
       messages.push(msg);
-      if (!msg.tool_calls?.length) return json({ reply: msg.content ?? "", state, cards });
+      if (!msg.tool_calls?.length) return json({ reply: msg.content ?? "", state, cards: tidy(cards) });
       for (const call of msg.tool_calls) {
         let result: unknown;
         try {
@@ -210,7 +223,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
       }
     }
-    return json({ reply: "", state, cards });
+    return json({ reply: body.lang === "zh" ? "好了，請看下面的卡片。" : "Done: see the cards below.", state, cards: tidy(cards) });
   } catch (e: any) {
     return json({ error: String(e.message ?? e) }, 502);
   }

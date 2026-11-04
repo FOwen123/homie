@@ -86,6 +86,7 @@ function wallGroup(room: Room, wallColor: string) {
 
 export function RoomViewer({ room, state, products, mode, selected, onSelect, onLabel, onMove }: Props) {
   const host = useRef<HTMLDivElement>(null);
+  const view = useRef<{ pos: THREE.Vector3; target: THREE.Vector3; mode: ViewMode } | null>(null); // the camera survives room updates while it builds
   const api = useRef<{ rebuild: () => void; reset: () => void; hold: Hold; nudge: (h: Hold) => void; shift: (right: number, away: number, turn: number) => void } | null>(null);
   const t = useT();
   const { lang } = useLang();
@@ -302,6 +303,12 @@ export function RoomViewer({ room, state, products, mode, selected, onSelect, on
     };
     api.current = { rebuild, reset: home, hold, nudge: (h) => step(h, 0.3), shift };
     home();
+    if (view.current?.mode === live.current.mode) { // same viewer, newer room data: stay where the user was looking
+      lastMode = view.current.mode;
+      camera.position.copy(view.current.pos);
+      controls.target.copy(view.current.target);
+      controls.update();
+    }
     rebuild();
 
     const ray = new THREE.Raycaster();
@@ -372,6 +379,7 @@ export function RoomViewer({ room, state, products, mode, selected, onSelect, on
       renderer.render(scene, camera);
     });
     return () => {
+      view.current = { pos: camera.position.clone(), target: controls.target.clone(), mode: live.current.mode };
       renderer.setAnimationLoop(null);
       ro.disconnect();
       controls.dispose();

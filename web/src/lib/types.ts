@@ -15,6 +15,7 @@ export type Room = {
   version: 1; shell: { width: number; depth: number; height: number; walls: Wall[] };
   objects: RoomObject[]; keyframes: Keyframe[]; world_to_room: number[][];
   finishes?: { wall: string; floor: string; ceiling: string; floor_material: string; style: string };
+  capture?: "video"; // built from a plain video (MapAnything): every size is rough
   judge?: { model: string; views: number[]; rounds: { round: number; scores: number[]; fixes: number; kept: boolean }[]; final: number[]; issues?: string[][] };
 };
 
@@ -47,3 +48,6 @@ export type Card =
   | { type: "list" };
 
 export type ChatTurn = { role: "user" | "assistant"; text: string; image?: string; cards?: Card[] };
+
+/** What /api/status/<id> reports while the processing server builds an uploaded room. */
+export type RoomStatus = { state: "queued" | "processing" | "done" | "failed"; stage?: "measure" | "objects" | "build" | "check" | "done"; detail?: string; error?: string };
