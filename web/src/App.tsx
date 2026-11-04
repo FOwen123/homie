@@ -85,7 +85,7 @@ function Landing() {
           <a href="#how">{t("howTitleShort")}</a><a href="/room/demo">{t("roomDemo")}</a><a href="#try">{t("navScan")}</a>
         </nav>
       </Header>
-      <section className="grid items-center gap-10 py-10 md:grid-cols-[540px_1fr] md:gap-14 md:py-14">
+      <section className="grid items-center gap-10 py-10 lg:grid-cols-[540px_1fr] lg:gap-14 md:py-14">
         <div className="flex flex-col gap-7">
           <p className="num flex items-center gap-2 text-[12px] tracking-[0.06em] text-graphite"><span className="h-2 w-2 rounded-full bg-iris" />{t("heroKicker")}</p>
           <h1 className="whitespace-pre-line text-[44px] leading-[1.14] md:text-[68px]">{t("tagline")}</h1>
@@ -106,7 +106,7 @@ function Landing() {
           <div className="grid-paper relative h-[380px] overflow-hidden rounded-[32px] md:h-[600px]">
             {demo && <RoomViewer room={demo} state={EMPTY} products={NO_PRODUCTS} mode="blocks" selected={null} onSelect={() => {}} />}
           </div>
-          {hero && <FitCard {...hero} className="absolute top-4 left-4 md:top-7 md:left-auto md:right-16" />}
+          {hero && <FitCard {...hero} className="absolute top-4 left-4 lg:top-7 lg:left-auto lg:right-16" />}
           <figcaption className="mt-3 text-[13px] text-fog">{t("demoCaption")}</figcaption>
         </figure>
       </section>
@@ -305,7 +305,7 @@ function RoomPage({ id }: { id: string }) {
             {tab === "chat"
               ? <Chat roomId={id} room={shown} state={state} setState={setState} products={products} turns={turns} setTurns={setTurns} onFocus={setSelected} selected={obj?.id} />
               : tab === "shop" ? <ShopAll room={shown} state={state} setState={setState} products={products} onFocus={setSelected} swap={obj} onClear={() => setSelected(null)} />
-              : <div className="p-4"><ShoppingList state={state} setState={setState} products={products} t={t} /></div>}
+              : <div className="h-full overflow-y-auto p-4"><ShoppingList state={state} setState={setState} products={products} t={t} /></div>}
           </div>
         </aside>
       </div>
