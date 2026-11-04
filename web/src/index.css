@@ -47,6 +47,7 @@ body {
 h1, h2, h3, .font-display { font-family: var(--font-display); font-weight: 500; letter-spacing: -0.02em; }
 :lang(zh), .zh { letter-spacing: 0; }
 .num { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--color-iris); outline-offset: 2px; }
 .iris-frame { padding: 3px; background: linear-gradient(rgb(71, 157, 255) 11.43%, rgb(0, 105, 224) 78.2%); border-radius: 27px; }
 
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
