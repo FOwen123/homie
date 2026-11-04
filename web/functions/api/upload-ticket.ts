@@ -4,7 +4,7 @@ import { type Env, json, underLimit } from "../_lib";
 type TicketEnv = Env & { ROOMIE_UPLOAD_TOKEN: string };
 
 export const onRequestPost: PagesFunction<TicketEnv> = async ({ request, env }) => {
-  if (!(await underLimit(env, request, "upload", 2, 20))) return json({ error: "busy" }, 429);
+  if (!(await underLimit(env, request, "upload", 10, 40))) return json({ error: "busy" }, 429);
   const origin = await env.LIMITS?.get("processor_origin");
   if (!origin) return json({ error: "offline" }, 503);
   // expiry + a random nonce, signed: every ticket is distinct and the processor uses each nonce once
