@@ -11,6 +11,10 @@ const T = {
   real: { zh: "真實", en: "Real" },
   reset: { zh: "重設視角", en: "Reset view" },
   list: { zh: "購物清單", en: "Shopping list" },
+  shop: { zh: "全部商品", en: "All products" },
+  swapFor: { zh: "換掉你的", en: "Swap out your" },
+  swapNone: { zh: "目錄裡還沒有可替換的蝦皮商品。", en: "No Shopee products like this in the catalog yet." },
+  showAll: { zh: "看全部", en: "Show all" },
   chatPlaceholder: { zh: "想添購什麼？", en: "What do you need?" },
   send: { zh: "送出", en: "Send" },
   showMe: { zh: "看看效果", en: "Show me" },
@@ -50,5 +54,5 @@ export function useT() {
 export const useLang = () => useContext(LangContext);
 export const LABEL_ZH: Record<string, string> = {
   bed: "床", desk: "書桌", chair: "椅子", door: "門", window: "窗", wardrobe: "衣櫃", shelf: "層架", cabinet: "櫃子",
-  "storage box": "收納箱", table: "桌子", sofa: "沙發", lamp: "燈", bin: "垃圾桶", "mini fridge": "小冰箱", "air conditioner": "冷氣", rug: "地毯",
+  "storage box": "收納箱", table: "桌子", sofa: "沙發", lamp: "燈", bin: "垃圾桶", "mini fridge": "小冰箱", "air conditioner": "冷氣", rug: "地毯", "drawer unit": "抽屜櫃",
 };

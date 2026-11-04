@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import { checkFit } from "../lib/fit";
-import { LangContext, useLang, useT } from "../lib/i18n";
-import type { Card, ChatTurn, Placement, Product, Room, RoomState } from "../lib/types";
-import { ProductCard, ntd } from "./bits";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { SWAP, checkFit, findSpot, replaceSpot } from "../lib/fit";
+import { LABEL_ZH, LangContext, useLang, useT } from "../lib/i18n";
+import type { Card, ChatTurn, FitResult, Placement, Product, Room, RoomObject, RoomState } from "../lib/types";
+import { ProductCard, dims, ntd } from "./bits";
 
 type Props = {
   roomId: string; room: Room; state: RoomState; setState: (s: RoomState) => void; products: Map<string, Product>;
-  turns: ChatTurn[]; setTurns: (t: ChatTurn[]) => void; onFocus: (id: string) => void;
+  turns: ChatTurn[]; setTurns: (t: ChatTurn[]) => void; onFocus: (id: string) => void; selected?: string | null;
 };
+/** Put a product in the room (App listens): swapped in for `replace`, or on a free spot. */
+const place = (productId: string, replace?: string) => window.dispatchEvent(new CustomEvent("roomie:place", { detail: { productId, replace } }));
 
 async function shrink(file: File): Promise<string> {
   const img = await createImageBitmap(file);
@@ -18,7 +20,7 @@ async function shrink(file: File): Promise<string> {
   return await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result as string); fr.readAsDataURL(blob); });
 }
 
-export function Chat({ roomId, room, state, setState, products, turns, setTurns, onFocus }: Props) {
+export function Chat({ roomId, room, state, setState, products, turns, setTurns, onFocus, selected }: Props) {
   const t = useT();
   const { lang } = useLang();
   const [text, setText] = useState("");
@@ -34,7 +36,7 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
     setText(""); setImage(undefined); setBusy(true);
     try {
       const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomId, lang, messages: next.map(({ role, text, image }) => ({ role, text, image })), state }) });
+        body: JSON.stringify({ roomId, lang, messages: next.map(({ role, text, image }) => ({ role, text, image })), state, selected }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error === "busy" ? t("busy") : j.error);
       setState(j.state);
@@ -81,7 +83,12 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
       <form onSubmit={(e) => { e.preventDefault(); void send(text); }} className="m-3 flex items-end gap-2 rounded-[28px] bg-paper-white p-2 shadow-float">
         <label className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-full text-graphite" title="photo">
           <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) setImage(await shrink(f)); e.target.value = ""; }} />
-          {image ? <img src={image} alt="" className="h-9 w-9 rounded-full object-cover" /> : <span aria-hidden>📷</span>}
+          {image ? <img src={image} alt="" className="h-9 w-9 rounded-full object-cover" /> : (
+            <svg aria-hidden viewBox="0 0 24 24" className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+              <circle cx="12" cy="13" r="3" />
+            </svg>
+          )}
         </label>
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={1} placeholder={t("chatPlaceholder")}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(text); } }}
@@ -92,7 +99,7 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
   );
 }
 
-function CardView({ card, roomId, room, state, setState, products, onFocus }: { card: Card } & Omit<Props, "turns" | "setTurns">) {
+function CardView({ card, roomId, room, state, setState, products, onFocus }: { card: Card } & Omit<Props, "turns" | "setTurns" | "selected">) {
   const t = useT();
   if (card.type === "products") {
     return (
@@ -103,10 +110,7 @@ function CardView({ card, roomId, room, state, setState, products, onFocus }: { 
           return (
             <ProductCard key={product.id} product={product} fit={liveFit} inList={state.list.includes(product.id)}
               onAdd={() => setState({ ...state, list: [...state.list, product.id] })}
-              onShow={() => {
-                if (placement) return onFocus(placement.id);
-                window.dispatchEvent(new CustomEvent("roomie:place", { detail: product.id }));
-              }} />
+              onShow={() => (placement ? onFocus(placement.id) : place(product.id, card.replace))} />
           );
         })}
       </div>
@@ -172,6 +176,53 @@ export function ShoppingList({ state, setState, products, t }: { state: RoomStat
         <span className="text-[15px] text-graphite">{t("total")}</span>
         <span className="num font-display text-[24px]">{ntd(total)}</span>
       </div>
+    </div>
+  );
+}
+
+const NO_SPOT: FitResult = { status: "no", clearance_cm: null, reason_en: "No free spot in your room", reason_zh: "房間裡沒有空位放" };
+
+/** Every product in the catalog, grouped by category, each checked against this room (best spot first).
+ *  With `swap` (an object tapped in the 3D view): only products that could replace it, checked in its place. */
+export function ShopAll({ room, state, setState, products, onFocus, swap, onClear }: Omit<Props, "roomId" | "turns" | "setTurns" | "selected"> & { swap?: RoomObject; onClear: () => void }) {
+  const t = useT();
+  const { lang } = useLang();
+  const name = (label: string) => (lang === "zh" ? LABEL_ZH[label] ?? label : label);
+  const groups = useMemo(() => {
+    const desk = room.objects.find((o) => o.label === "desk" && !state.removed.includes(o.id));
+    const trial = swap ? { ...state, removed: [...state.removed, swap.id] } : state;
+    const rank = { yes: 0, check: 1, no: 2 };
+    const rows = [...products.values()].filter((p) => !swap || SWAP[swap.label]?.includes(p.category)).map((product) => {
+      const placement = swap ? undefined : state.placements.find((p) => p.productId === product.id);
+      const spot = placement ?? (swap ? replaceSpot(state, products, swap, product.id) : findSpot(room, state, products, product.id, product.category === "lamp" ? desk : undefined));
+      return { product, placement, fit: spot ? checkFit(room, trial, products, spot) : NO_SPOT };
+    }).sort((a, b) => rank[a.fit.status] - rank[b.fit.status] || a.product.price - b.product.price);
+    const by = new Map<string, typeof rows>();
+    for (const r of rows) by.set(r.product.category, [...(by.get(r.product.category) ?? []), r]);
+    return [...by];
+  }, [room, state, products, swap]);
+  return (
+    <div className="h-full space-y-5 overflow-y-auto px-4 pt-4 pb-6">
+      {swap && (
+        <div className="flex items-center justify-between gap-2 rounded-[24px] bg-paper-white p-4">
+          <p className="text-[15px]">{t("swapFor")} <b>{name(swap.label)}</b> <span className="num text-fog">≈ {dims(state.sizeEdits[swap.id] ?? swap.size)}</span>
+            {!groups.length && <span className="block text-fog">{t("swapNone")}</span>}</p>
+          <button onClick={onClear} className="min-h-11 shrink-0 rounded-full border border-ink/12 px-4 text-[14px]">{t("showAll")}</button>
+        </div>
+      )}
+      {groups.map(([cat, rows]) => (
+        <section key={cat}>
+          <h3 className="mb-2 text-[17px]">{lang === "zh" ? name(cat) : cat[0].toUpperCase() + cat.slice(1)} <span className="num text-fog">{rows.length}</span></h3>
+          <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1">
+            {rows.map(({ product, placement, fit }) => (
+              <ProductCard key={product.id} product={product} fit={fit} inList={state.list.includes(product.id)}
+                onAdd={() => setState({ ...state, list: [...state.list, product.id] })}
+                onShow={() => (placement ? onFocus(placement.id) : place(product.id, swap?.id))} />
+            ))}
+          </div>
+        </section>
+      ))}
+      {!groups.length && !swap && <p className="text-[15px] text-fog">{t("thinking")}</p>}
     </div>
   );
 }

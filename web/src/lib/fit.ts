@@ -136,4 +136,21 @@ export function findSpot(room: Room, state: RoomState, products: Map<string, Pro
   return best?.p ?? null;
 }
 
-export const productMap = (list: Product[]) => new Map(list.map((p) => [p.id, p]));
+/** Catalog categories that can stand in for an existing object (missing: nothing like it in the catalog yet). */
+export const SWAP: Record<string, string[]> = {
+  wardrobe: ["cabinet"], cabinet: ["cabinet", "drawer unit"], shelf: ["shelf", "cabinet"], "storage box": ["storage box", "drawer unit"],
+  "drawer unit": ["drawer unit", "cabinet", "storage box"], lamp: ["lamp", "floor lamp"], rug: ["rug"],
+};
+
+/** Stand a product where an existing object stands: same facing, its back where the old back was (so a piece
+ *  against a wall stays against it). Check it with `obj` in `removed`. */
+export function replaceSpot(state: RoomState, products: Map<string, Product>, obj: RoomObject, productId: string): Placement | null {
+  const pr = products.get(productId);
+  if (!pr?.size) return null;
+  const k = (pr.size.d - (state.sizeEdits[obj.id] ?? obj.size).d) / 2;
+  const y = Math.max(0, obj.center[1] - obj.size.h / 2);
+  return { id: `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, productId, yaw: obj.yaw,
+    x: obj.center[0] + Math.sin(obj.yaw) * k, z: obj.center[2] + Math.cos(obj.yaw) * k, ...(y > 0.03 ? { y } : {}) };
+}
+
+export const productMap =(list: Product[]) => new Map(list.map((p) => [p.id, p]));

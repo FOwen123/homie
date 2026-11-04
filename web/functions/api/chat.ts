@@ -1,8 +1,8 @@
 // The Roomie shopping agent: Muse Spark with tools that read the room, search the Shopee catalog, and
 // place/move/remove items. Tools run here, on our own code (fit checks are deterministic); the client
 // gets back the reply, the new room state and rich cards. Stateless: the client sends history + state.
-import { checkFit, findSpot, productMap } from "../../src/lib/fit";
-import type { Card, ChatTurn, Placement, Product, Room, RoomState } from "../../src/lib/types";
+import { checkFit, findSpot, productMap, replaceSpot } from "../../src/lib/fit";
+import type { Card, ChatTurn, Product, Room, RoomState } from "../../src/lib/types";
 import { type Env, json, loadCatalog, loadRoom, meta, underLimit } from "../_lib";
 
 const MODEL = "muse-spark-1.3"; // standard mode: visitors' chats and photos stay out of model training
@@ -19,6 +19,7 @@ const tools = [
   fn("show_products", "Show 1-3 products to the user as cards with a fit check. Always do this after choosing candidates.", {
     product_ids: { type: "array", items: { type: "string" } }, title: { type: "string" },
     near_object_id: { type: "string", description: "existing object to place them near, if the user said where" },
+    replace_object_id: { type: "string", description: "existing object these would replace; tapping a card swaps it in the room" },
   }, ["product_ids"]),
   fn("place_item", "Put a product into the user's 3D room. Code finds a free spot against a wall (or on top of near_object for lamps) and checks the fit.", {
     product_id: { type: "string" }, near_object_id: { type: "string" },
@@ -70,6 +71,7 @@ Rules:
 - Fit results come from code. Never claim something fits unless a tool said so. Mention approx sizes briefly when relevant.
 - Product data is in Chinese; reply in ${lang === "zh" ? "Traditional Chinese (zh-TW)" : "English"}, whatever language the product titles are in. Prices in NT$.
 - Keep replies short: 1-3 sentences. The cards show the details.
+- To replace something already in the room, pass replace_object_id to show_products (or place_item).
 ${room}`;
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
@@ -77,7 +79,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY) return json({ error: "too large" }, 413);
   const raw = await request.text();
   if (raw.length > MAX_BODY) return json({ error: "too large" }, 413);
-  const body = JSON.parse(raw) as { roomId: string; lang: "zh" | "en"; messages: ChatTurn[]; state: RoomState };
+  const body = JSON.parse(raw) as { roomId: string; lang: "zh" | "en"; messages: ChatTurn[]; state: RoomState; selected?: string };
   if (!Array.isArray(body.messages) || !body.state) return json({ error: "bad request" }, 400);
   if (!(await underLimit(env, request, "chat", 40, 600))) return json({ error: "busy" }, 429);
   body.messages = body.messages.slice(-8).map((m, i, all) => ({
@@ -123,11 +125,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         .map(({ p }) => ({ id: p.id, name: p.title_en, price: p.price, size_cm: p.size && `${cm(p.size.w)}×${cm(p.size.d)}×${cm(p.size.h)}`, size_source: p.size_source, category: p.category, color: p.color, sold: p.sold }));
     },
     show_products: (a) => {
+      const replaced = objectById(a.replace_object_id);
+      const trial: RoomState = replaced ? { ...state, removed: [...state.removed, replaced.id] } : state;
       const items = (a.product_ids as string[]).map((id) => pm.get(id)).filter(Boolean).slice(0, 3).map((product) => {
-        const spot = findSpot(room, state, pm, product!.id, nearFor(product!.id, a.near_object_id));
-        return { product: product!, fit: spot ? checkFit(room, state, pm, spot) : { status: "no" as const, clearance_cm: null, reason_en: "No free spot found", reason_zh: "房間裡找不到空位" } };
+        const spot = replaced ? replaceSpot(state, pm, replaced, product!.id) : findSpot(room, state, pm, product!.id, nearFor(product!.id, a.near_object_id));
+        return { product: product!, fit: spot ? checkFit(room, trial, pm, spot) : { status: "no" as const, clearance_cm: null, reason_en: "No free spot found", reason_zh: "房間裡找不到空位" } };
       });
-      cards.push({ type: "products", title: a.title, items });
+      cards.push({ type: "products", title: a.title, items, ...(replaced ? { replace: replaced.id } : {}) });
       return items.map((i) => ({ id: i.product.id, fit: i.fit.status, reason: i.fit.reason_en }));
     },
     place_item: (a) => {
@@ -136,7 +140,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       if (!pr) return { error: "unknown product" };
       // Try with the replaced object hidden, but only keep it hidden if the new product actually fits.
       const trial: RoomState = replaced ? { ...state, removed: [...state.removed, replaced.id] } : state;
-      let spot: Placement | null = replaced && pr.size ? { id: `p${Date.now().toString(36)}`, productId: pr.id, x: replaced.center[0], z: replaced.center[2], yaw: replaced.yaw } : null;
+      let spot = replaced ? replaceSpot(state, pm, replaced, pr.id) : null;
       spot = spot && checkFit(room, trial, pm, spot).status !== "no" ? spot : findSpot(room, trial, pm, a.product_id, nearFor(a.product_id, a.near_object_id));
       if (!spot) return { error: "no free spot in the room" };
       if (replaced) state.removed.push(replaced.id);
@@ -182,7 +186,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const history = body.messages.slice(-12).map((m) => m.role === "user"
     ? { role: "user", content: m.image ? [{ type: "text", text: m.text || "(photo)" }, { type: "image_url", image_url: { url: m.image } }] : m.text }
     : { role: "assistant", content: m.text });
-  const messages: any[] = [{ role: "system", content: SYSTEM(body.lang, describeRoom(room, state, pm)) }, ...history];
+  const picked = objectById(objIds.has(String(body.selected)) ? String(body.selected) : undefined); // tapped in the 3D view
+  const context = describeRoom(room, state, pm) + (picked ? `\nThe user has tapped ${picked.id} (${picked.label}) in the 3D view; "this" or "it" means that object.` : "");
+  const messages: any[] = [{ role: "system", content: SYSTEM(body.lang, context) }, ...history];
   try {
     for (let step = 0; step < MAX_STEPS; step++) {
       const r = await meta(env, "/chat/completions", { model: MODEL, reasoning_effort: "low", messages, tools, max_tokens: MAX_OUT });

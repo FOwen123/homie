@@ -23,9 +23,11 @@ await step("keyframes", () =>
 await step("labels + masks (Muse, SAM)", () => $`bun ${join(import.meta.dir, "segment.ts")} ${join(work, "kf")} ${join(work, "seg")}`.quiet());
 await step("measure on ARKit planes", () => py("measure.py", capture, join(work, "seg"), join(work, "measure.json")).quiet());
 await step("room shell + objects", () => py("room.py", capture, join(work, "seg"), join(work, "kf"), join(work, "measure.json"), bundle));
+await step("line furniture up with the walls", () => py("layout.py", bundle));
 await cp(join(work, "kf"), join(bundle, "keyframes"), { recursive: true });
 await step("furniture parts + finishes (Muse)", () => $`bun ${join(import.meta.dir, "parts.ts")} ${bundle}`.quiet());
 await step("judge: blocks vs real frames (Muse)", () => $`bun ${join(import.meta.dir, "judge.ts")} ${bundle}`.quiet());
+await step("re-square after the judge's moves", () => py("layout.py", bundle));
 if (!process.argv.includes("--no-splat")) {
   await step("splat dataset", () => $`uv run -q --with numpy python ${join(import.meta.dir, "splat_dataset.py")} ${capture} ${join(work, "splat_ds")} 10 960`.quiet());
   await step("splat fit (msplat)", () =>

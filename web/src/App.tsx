@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Chat, ShoppingList, freshPhotos, photoKey } from "./components/Chat";
+import { Chat, ShopAll, ShoppingList, freshPhotos, photoKey } from "./components/Chat";
 import { RoomViewer, type ViewMode } from "./components/RoomViewer";
 import { MeasureChip, dims } from "./components/bits";
-import { findSpot, productMap } from "./lib/fit";
+import { findSpot, productMap, replaceSpot } from "./lib/fit";
 import { LangContext, type Lang, useT } from "./lib/i18n";
 import type { ChatTurn, Product, Room, RoomState } from "./lib/types";
 
@@ -43,7 +43,7 @@ function Landing() {
   return (
     <main className="mx-auto flex min-h-full max-w-[1200px] flex-col px-4 py-6 md:px-10">
       <header className="flex items-center justify-between">
-        <span className="font-display text-[22px]">Roomie</span>
+        <img src="/roomie-logo.png" alt="Roomie" className="h-7 w-auto" />
         <LangToggle />
       </header>
       <section className="my-auto py-12">
@@ -70,7 +70,7 @@ function RoomPage({ id }: { id: string }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [label, setLabel] = useState<{ x: number; y: number } | null>(null);
   const [resetKey, setResetKey] = useState(0);
-  const [tab, setTab] = useState<"chat" | "list">("chat");
+  const [tab, setTab] = useState<"chat" | "shop" | "list">("chat");
   const [editing, setEditing] = useState(false);
   const products = useMemo(() => productMap(catalog), [catalog]);
 
@@ -82,14 +82,16 @@ function RoomPage({ id }: { id: string }) {
   useEffect(() => { // "Show me" on a not-yet-placed product: place it, then ask for a photo
     const h = (e: Event) => {
       if (!room) return;
-      const pid = (e as CustomEvent).detail as string;
+      const { productId: pid, replace } = (e as CustomEvent).detail as { productId: string; replace?: string };
+      const old = room.objects.find((o) => o.id === replace && !state.removed.includes(o.id));
       const desk = products.get(pid)?.category === "lamp" ? room.objects.find((o) => o.label === "desk" && !state.removed.includes(o.id)) : undefined;
-      const spot = findSpot(room, state, products, pid, desk);
+      const spot = old ? replaceSpot(state, products, old, pid) : findSpot(room, state, products, pid, desk);
       if (!spot) return;
-      setState({ ...state, placements: [...state.placements, spot] });
+      setState({ ...state, removed: old ? [...state.removed, old.id] : state.removed, placements: [...state.placements, spot] });
       setSelected(spot.id);
       freshPhotos.add(photoKey(spot));
       setTurns([...turns, { role: "assistant", text: "", cards: [{ type: "photo", placementId: spot.id, productId: spot.productId }] }]);
+      setTab("chat"); // the photo appears in the chat
     };
     window.addEventListener("roomie:place", h);
     return () => window.removeEventListener("roomie:place", h);
@@ -105,10 +107,11 @@ function RoomPage({ id }: { id: string }) {
       <section className="relative h-[46svh] shrink-0 p-3 md:h-full md:flex-1 md:p-6">
         <div className="iris-frame h-full">
           <div className="relative h-full overflow-hidden rounded-[24px] bg-sky-tint">
-            <RoomViewer room={room} roomUrl={url} state={state} products={products} mode={mode} selected={selected} onSelect={setSelected} onLabel={setLabel} resetKey={resetKey} />
+            <RoomViewer room={room} roomUrl={url} state={state} products={products} mode={mode} selected={selected}
+              onSelect={(sel) => { setSelected(sel); if (room.objects.some((o) => o.id === sel)) setTab("shop"); }} onLabel={setLabel} resetKey={resetKey} />
             <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-3">
               <div className="pointer-events-auto rounded-full bg-paper-white/90 px-3 py-1.5 text-[13px]">
-                <a href="/" className="font-display">Roomie</a> · <span className="num">{(area / 3.3058).toFixed(1)} 坪 · {dims({ w: room.shell.width, d: room.shell.depth, h: room.shell.height })}</span>
+                <a href="/" className="inline-flex items-center align-[-3px]"><img src="/roomie-logo.png" alt="Roomie" className="h-4 w-auto" /></a> · <span className="num">{(area / 3.3058).toFixed(1)} 坪 · {dims({ w: room.shell.width, d: room.shell.depth, h: room.shell.height })}</span>
               </div>
               {room.judge && (
                 <div className="pointer-events-auto absolute top-14 left-3 rounded-full bg-paper-white/90 px-3 py-1 text-[12px] text-graphite"
@@ -138,15 +141,16 @@ function RoomPage({ id }: { id: string }) {
       </section>
       <aside className="flex min-h-0 flex-1 flex-col md:w-[440px] md:flex-none md:py-6 md:pr-6">
         <div className="flex gap-1 px-4 pt-1 md:px-1">
-          {(["chat", "list"] as const).map((k) => (
+          {(["chat", "shop", "list"] as const).map((k) => (
             <button key={k} onClick={() => setTab(k)} className={`min-h-10 rounded-full px-4 text-[14px] ${tab === k ? "bg-bone-white text-ink" : "text-graphite"}`}>
-              {k === "chat" ? "Roomie" : `${t("list")} (${state.list.length})`}
+              {k === "chat" ? "Roomie" : k === "shop" ? `${t("shop")} (${catalog.length})` : `${t("list")} (${state.list.length})`}
             </button>
           ))}
         </div>
         <div className="min-h-0 flex-1">
           {tab === "chat"
-            ? <Chat roomId={id} room={room} state={state} setState={setState} products={products} turns={turns} setTurns={setTurns} onFocus={setSelected} />
+            ? <Chat roomId={id} room={room} state={state} setState={setState} products={products} turns={turns} setTurns={setTurns} onFocus={setSelected} selected={obj?.id} />
+            : tab === "shop" ? <ShopAll room={room} state={state} setState={setState} products={products} onFocus={setSelected} swap={obj} onClear={() => setSelected(null)} />
             : <div className="p-4"><ShoppingList state={state} setState={setState} products={products} t={t} /></div>}
         </div>
       </aside>
