@@ -19,7 +19,6 @@ const step = async (name: string, fn: () => Promise<unknown>) => {
 };
 
 const meta = await Bun.file(join(capture, "meta.json")).json();
-const video = meta.source === "mapanything"; // a plain video, reconstructed by MapAnything (pipeline/video_capture.py)
 const every = meta.keyframe_every ?? 50;
 await mkdir(join(work, "kf"), { recursive: true });
 await step("keyframes", () =>
@@ -27,7 +26,6 @@ await step("keyframes", () =>
 await step("labels + masks (Muse, SAM)", () => $`bun ${join(import.meta.dir, "segment.ts")} ${join(work, "kf")} ${join(work, "seg")}`.quiet());
 await step("measure on ARKit planes", () => py("measure.py", capture, join(work, "seg"), join(work, "measure.json")).quiet());
 await step("room shell + objects", () => py("room.py", capture, join(work, "seg"), join(work, "kf"), join(work, "measure.json"), bundle));
-if (video) await step("real-world scale from known-size objects", () => py("rescale.py", bundle));
 await step("line furniture up with the walls", () => py("layout.py", bundle));
 await cp(join(work, "kf"), join(bundle, "keyframes"), { recursive: true });
 await step("fit estimated pieces to their outlines, one crop each", () => py("fit_boxes.py", bundle, join(work, "seg")));
