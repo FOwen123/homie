@@ -42,9 +42,14 @@ export async function underLimit(env: Env, req: Request, kind: "chat" | "photo" 
   const day = new Date().toISOString().slice(0, 10);
   const ip = req.headers.get("cf-connecting-ip") ?? "local";
   const keys = [`${kind}:${day}:${ip}`, `${kind}:${day}:all`];
-  const [mine, all] = await Promise.all(keys.map(async (k) => Number((await env.LIMITS!.get(k)) ?? 0)));
-  if (mine >= perIp || all >= total) return false;
-  await Promise.all([env.LIMITS.put(keys[0], String(mine + 1), { expirationTtl: 172800 }), env.LIMITS.put(keys[1], String(all + 1), { expirationTtl: 172800 })]);
+  try {
+    const [mine, all] = await Promise.all(keys.map(async (k) => Number((await env.LIMITS!.get(k)) ?? 0)));
+    if (mine >= perIp || all >= total) return false;
+    await Promise.all([env.LIMITS.put(keys[0], String(mine + 1), { expirationTtl: 172800 }), env.LIMITS.put(keys[1], String(all + 1), { expirationTtl: 172800 })]);
+  } catch {
+    // KV's free plan allows 1,000 writes a day: past that the counters can't count, so let the request through
+    // rather than fail it; the Meta account's credit stays the real ceiling. Modal keeps its own upload cap.
+  }
   return true;
 }
 
