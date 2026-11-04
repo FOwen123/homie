@@ -49,7 +49,7 @@ image = (
 )
 FILES = ["video.mov", "frames.jsonl", "features.jsonl", "planes.json", "meta.json"]
 MAX_VIDEO = 300 * 1024 * 1024
-DAILY_MAX = 20
+DAILY_MAX = 40
 MAX_FRAMES = 60
 ID = re.compile(r"^r[a-z0-9]{6,30}$")
 # pipeline/process.ts and process_video.ts step names → loading-screen stage

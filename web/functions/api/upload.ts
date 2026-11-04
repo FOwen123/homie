@@ -6,7 +6,7 @@ type UpEnv = Env & { ROOMIE_UPLOAD_TOKEN: string };
 const MAX_BYTES = 300 * 1024 * 1024; // pipeline/modal_app.py MAX_VIDEO
 
 export const onRequestPost: PagesFunction<UpEnv> = async ({ request, env }) => {
-  if (!(await underLimit(env, request, "upload", 3, 20))) return json({ error: "busy" }, 429);
+  if (!(await underLimit(env, request, "upload", 10, 40))) return json({ error: "busy" }, 429);
   const origin = await env.LIMITS?.get("processor_origin");
   if (!origin) return json({ error: "processing is offline, try again later" }, 503);
   // the processor needs the length up front (it refuses bodies it can't size before reading them)
