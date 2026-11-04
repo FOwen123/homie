@@ -7,6 +7,7 @@ import { ProductCard, dims, ntd } from "./bits";
 type Props = {
   roomId: string; room: Room; state: RoomState; setState: React.Dispatch<React.SetStateAction<RoomState>>; products: Map<string, Product>;
   turns: ChatTurn[]; setTurns: (t: ChatTurn[]) => void; onFocus: (id: string) => void; selected?: string | null;
+  opened: string[]; setOpened: React.Dispatch<React.SetStateAction<string[]>>; // checkout progress, shared by every list
 };
 /** Put a product in the room (App listens): swapped in for `replace`, or on a free spot. */
 const place = (productId: string, replace?: string) => window.dispatchEvent(new CustomEvent("roomie:place", { detail: { productId, replace } }));
@@ -29,7 +30,7 @@ function followUps(turns: ChatTurn[], state: RoomState): Key[] {
   return state.placements.length ? ["followPhoto", "followCheaper", "followMore"] : [];
 }
 
-export function Chat({ roomId, room, state, setState, products, turns, setTurns, onFocus, selected }: Props) {
+export function Chat({ roomId, room, state, setState, products, turns, setTurns, onFocus, selected, opened, setOpened }: Props) {
   const t = useT();
   const { lang } = useLang();
   const [text, setText] = useState("");
@@ -78,7 +79,7 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
                 </div>
               </div>
             )}
-            {m.cards?.map((c, j) => <CardView key={j} card={c} {...{ roomId, room, state, setState, products, onFocus }} />)}
+            {m.cards?.map((c, j) => <CardView key={j} card={c} {...{ roomId, room, state, setState, products, onFocus, opened, setOpened }} />)}
           </div>
         ))}
         {busy && <div className="flex items-center gap-2 text-[15px] text-fog"><span className="pulse-dot h-2 w-2 rounded-full bg-powder-blue" />{t("thinking")}</div>}
@@ -90,7 +91,7 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
           className="flex snap-x gap-2 overflow-x-auto px-4 pt-1 [mask-image:linear-gradient(to_right,black_calc(100%-28px),transparent)] [scrollbar-width:none] md:px-5">
           {chips.map((k) => (
             <button key={k} onClick={() => send(t(k))}
-              className="min-h-10 shrink-0 snap-start whitespace-nowrap rounded-full border border-ink/10 bg-paper px-4 text-[14px] text-ink hover:bg-sand">{t(k)}</button>
+              className="min-h-11 shrink-0 snap-start whitespace-nowrap rounded-full border border-ink/10 bg-paper px-4 text-[14px] text-ink hover:bg-sand">{t(k)}</button>
           ))}
           <span aria-hidden className="w-2 shrink-0" />
         </div>
@@ -125,7 +126,7 @@ function Avatar() {
   );
 }
 
-function CardView({ card, roomId, room, state, setState, products, onFocus }: { card: Card } & Omit<Props, "turns" | "setTurns" | "selected">) {
+function CardView({ card, roomId, room, state, setState, products, onFocus, opened, setOpened }: { card: Card } & Omit<Props, "turns" | "setTurns" | "selected">) {
   const t = useT();
   if (card.type === "products") {
     return (
@@ -147,7 +148,7 @@ function CardView({ card, roomId, room, state, setState, products, onFocus }: { 
     // keyed by position: a moved product remounts the card, so it never shows (or fetches for) the old spot
     return <PhotoCard key={placement ? photoKey(placement) : card.placementId} roomId={roomId} placement={placement} />;
   }
-  return <ShoppingList state={state} setState={setState} products={products} t={t} />;
+  return <ShoppingList state={state} setState={setState} products={products} t={t} opened={opened} setOpened={setOpened} />;
 }
 
 // Each AI photo costs a Muse Image call: generate only for photo cards created in this visit, cache the
@@ -183,12 +184,13 @@ export function PhotoCard({ roomId, placement }: { roomId: string; placement?: P
   );
 }
 
-export function ShoppingList({ state, setState, products, t }: { state: RoomState; setState: React.Dispatch<React.SetStateAction<RoomState>>; products: Map<string, Product>; t: ReturnType<typeof useT> }) {
-  const [opened, setOpened] = useState<string[]>([]); // checkout opens one Shopee page per tap (browsers block several at once)
+// Checkout opens one Shopee page per tap (browsers block several at once); `opened` lives in the room page so
+// progress survives switching tabs, and only items still on the list count.
+export function ShoppingList({ state, setState, products, t, opened, setOpened }: { state: RoomState; setState: React.Dispatch<React.SetStateAction<RoomState>>; products: Map<string, Product>; t: ReturnType<typeof useT> } & Pick<Props, "opened" | "setOpened">) {
   const items = state.list.map((id) => products.get(id)).filter((p): p is Product => !!p);
   const total = items.reduce((s, p) => s + p.price, 0);
   if (!items.length) return <p className="rounded-[24px] bg-paper p-4 text-[15px] text-fog">{t("empty")}</p>;
-  const next = items.find((p) => !opened.includes(p.id));
+  const next = items.find((p) => !opened.includes(p.id)), done = items.length - items.filter((p) => !opened.includes(p.id)).length;
   const open = (id: string) => setOpened((o) => (o.includes(id) ? o : [...o, id]));
   return (
     <div className="rounded-[24px] bg-paper p-4">
@@ -203,7 +205,7 @@ export function ShoppingList({ state, setState, products, t }: { state: RoomStat
             </a>
           </div>
           <span className="num text-[15px]">{ntd(p.price)}</span>
-          <button onClick={() => setState({ ...state, list: state.list.filter((x) => x !== p.id) })} aria-label={`${t("remove")} ${p.title}`} className="grid h-11 w-9 place-items-center text-fog">✕</button>
+          <button onClick={() => setState({ ...state, list: state.list.filter((x) => x !== p.id) })} aria-label={`${t("remove")} ${p.title}`} className="grid h-11 w-11 shrink-0 place-items-center text-fog">✕</button>
         </div>
       ))}
       <div className="mt-3 flex items-baseline justify-between">
@@ -212,7 +214,7 @@ export function ShoppingList({ state, setState, products, t }: { state: RoomStat
       </div>
       <a href={(next ?? items[0]).url} target="_blank" rel="noreferrer" onClick={() => next && open(next.id)}
         className="mt-3 flex min-h-12 w-full items-center justify-center rounded-full bg-charcoal px-6 text-[16px] text-paper-white shadow-button">
-        {!next ? t("checkoutDone") : opened.length ? `${t("checkoutNext")} ${opened.length + 1}/${items.length}` : `${t("checkout")} (${items.length})`}
+        {!next ? t("checkoutDone") : done ? `${t("checkoutNext")} ${done + 1}/${items.length}` : `${t("checkout")} (${items.length})`}
       </a>
       <p className="mt-2 text-[13px] text-fog">{t("checkoutNote")}</p>
     </div>
@@ -223,7 +225,7 @@ const NO_SPOT: FitResult = { status: "no", clearance_cm: null, reason_en: "No fr
 
 /** Every product in the catalog, grouped by category, each checked against this room (best spot first).
  *  With `swap` (an object tapped in the 3D view): only products that could replace it, checked in its place. */
-export function ShopAll({ room, state, setState, products, onFocus, swap, onClear }: Omit<Props, "roomId" | "turns" | "setTurns" | "selected"> & { swap?: RoomObject; onClear: () => void }) {
+export function ShopAll({ room, state, setState, products, onFocus, swap, onClear }: Omit<Props, "roomId" | "turns" | "setTurns" | "selected" | "opened" | "setOpened"> & { swap?: RoomObject; onClear: () => void }) {
   const t = useT();
   const { lang } = useLang();
   const name = (label: string) => (lang === "zh" ? LABEL_ZH[label] ?? label : label);

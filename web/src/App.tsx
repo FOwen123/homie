@@ -225,6 +225,7 @@ function RoomPage({ id }: { id: string }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [label, setLabel] = useState<{ x: number; y: number } | null>(null);
   const [tab, setTab] = useState<"chat" | "shop">("chat");
+  const [opened, setOpened] = useState<string[]>([]); // products opened on Shopee by checkout
   const [editing, setEditing] = useState(false);
   const products = useMemo(() => productMap(catalog), [catalog]);
   // Undo: every change to the room (a drag, a nudge, a chat reply, a list edit) can be taken back, up to 50
@@ -369,10 +370,10 @@ function RoomPage({ id }: { id: string }) {
             items={[{ key: "chat", label: t("chatTab") }, { key: "shop", label: t("shop"), badge: state.list.length || undefined }]} />
           <div className="min-h-0 flex-1">
             {tab === "chat"
-              ? <Chat roomId={id} room={shown} state={state} setState={setState} products={products} turns={turns} setTurns={setTurns} onFocus={setSelected} selected={obj?.id} />
+              ? <Chat roomId={id} room={shown} state={state} setState={setState} products={products} turns={turns} setTurns={setTurns} onFocus={setSelected} selected={obj?.id} opened={opened} setOpened={setOpened} />
               : <div className="h-full overflow-y-auto">
                   {/* one Shop tab: your list and checkout on top, every product that fits below */}
-                  {state.list.length > 0 && !obj && <div className="px-4 pt-4"><ShoppingList state={state} setState={setState} products={products} t={t} /></div>}
+                  {state.list.length > 0 && !obj && <div className="px-4 pt-4"><ShoppingList state={state} setState={setState} products={products} t={t} opened={opened} setOpened={setOpened} /></div>}
                   <ShopAll room={shown} state={state} setState={setState} products={products} onFocus={setSelected} swap={obj} onClear={() => setSelected(null)} />
                 </div>}
           </div>
