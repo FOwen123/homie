@@ -311,9 +311,7 @@ function RoomPage({ id }: { id: string }) {
     <div className="flex h-full flex-col gap-3 px-3 pt-3 md:gap-6 md:px-6 md:pt-5">
       <Header />
       <section className="relative h-[46svh] shrink-0 md:h-full md:flex-1">
-        <div className="iris-frame h-full">
-          <div className="grid h-full place-items-center overflow-hidden rounded-[24px] bg-sky-tint p-4">{status && <Building status={status} />}</div>
-        </div>
+        <div className="grid-paper relative grid h-full place-items-center overflow-hidden rounded-[24px] p-4 md:rounded-[28px]">{status && <Building status={status} />}</div>
       </section>
       <p className="px-1 text-[15px] text-graphite">{t("chatWaiting")}</p>
     </div>
@@ -341,7 +339,7 @@ function RoomPage({ id }: { id: string }) {
               onSelect={(sel) => { setSelected(sel); if (room.objects.some((o) => o.id === sel)) setTab("shop"); }} onLabel={setLabel}
               onMove={(id, pose) => setState(moveIn(state, id, pose))} />
             {status && status.state !== "done" && status.state !== "failed" && ( // a room already shown stays as it is if its build failed
-              <div className="absolute inset-x-3 top-3 z-10 md:inset-x-6 md:top-6"><Building status={status} /></div>
+              <div className="absolute inset-x-3 top-3 z-10 md:inset-x-6 md:top-6"><Building status={status} overlay /></div>
             )}
             <div className="pointer-events-none absolute bottom-3 left-3 flex flex-col items-start gap-2 md:bottom-5 md:left-5">
               {past.length > 0 && (

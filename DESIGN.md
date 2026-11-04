@@ -125,7 +125,7 @@ White, 22px radius, 1px ink border at 10%, 10px padding, 216px wide. Top: produc
 - **Quick replies:** one horizontal, swipeable row of Paper pill chips just above the composer, fading at the right edge; first-visit questions, then follow-ups that fit the last reply.
 
 ### 5.6 Processing progress
-Vertical list of the 5 steps from `PLAN.md` §5 (frames → scale → 3D → objects → sizes). Done: Ink text + Iris check. Current: Ink + a soft pulsing Powder Blue dot. Waiting: Fog. A thin Powder Blue track with an Iris fill sits on top. Show the latest keyframe thumbnail beside it so the wait feels like progress.
+Before the room exists: an isometric empty room on the grid surface assembles itself. The walls fade in and a dashed Iris line pulses along the floor while measuring; Powder Blue blocks with Iris edges drop in as objects are found and each builder part finishes (the server's `3/8`). The blocks are placeholders for progress, never the user's furniture. A Paper White status bar sits at the bottom: an Iris progress ring (finished steps plus finished parts), the step name, the server's detail in mono Graphite, and "you can leave" in Fog. Once the room shows in 3D but is still building, only the status bar stays, at the top of the viewer.
 
 ### 5.7 Approx. size, tap to correct
 Partly seen sizes never block the user and never trigger a question. They use the estimated chip (§5.2) with a wider ± and a caption-size "約 approx." tag, e.g. `○ ≈ 86 × 50 cm ±15 · 約 approx.` Tapping it opens a small sheet with the method ("From ARKit points, 6 frames") and a numeric cm input; a saved value becomes a `user` chip (✎). The chat agent accepts the same correction in words ("my desk is 100 cm").
