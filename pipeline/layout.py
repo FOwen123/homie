@@ -1,6 +1,6 @@
 """Line furniture up with the room: square to the walls, inside the room, flush against a wall it nearly
 touches, front facing into the room, not overlapping other furniture, and never floating (it sits on the
-furniture under it or reaches the floor). Sizes never change, except growing down to the floor.
+furniture under it or reaches the floor; wall-mounted pieces hang on their wall, under the ceiling). Sizes never change, except growing down to the floor.
 Runs after room.py and again after judge.ts (its moves can drift).
 
 Usage: uv run --with numpy python pipeline/layout.py <bundle_dir>   (rewrites <bundle_dir>/room.json)
@@ -106,9 +106,13 @@ def overlaps_xz(a, b):
     (ahx, ahz), (bhx, bhz) = half(a), half(b)
     return abs(a["center"][0] - b["center"][0]) < ahx + bhx - 0.02 and abs(a["center"][2] - b["center"][2]) < ahz + bhz - 0.02
 
+H = room["shell"]["height"]
 for o in sorted(objs, key=lambda o: span(o)[0]):
     y0 = span(o)[0]
-    if o["label"] in WALL_MOUNTED or y0 <= 0.03:
+    if o["label"] in WALL_MOUNTED:  # hangs on its wall, just under the ceiling at most
+        o["center"][1] = min(o["center"][1], H - 0.05 - o["size"]["h"] / 2)
+        continue
+    if y0 <= 0.03:
         continue
     tops = [span(b)[1] for b in objs if b is not o and b["label"] not in WALL_MOUNTED and span(b)[1] <= y0 + 0.05 and overlaps_xz(o, b)]
     if tops:

@@ -51,8 +51,12 @@ function LangToggle() {
   return (
     <LangContext.Consumer>
       {({ lang, setLang }) => (
-        <button onClick={() => setLang(lang === "zh" ? "en" : "zh")} className="min-h-11 rounded-full border border-ink/14 px-4 text-[14px]" aria-label="language">
-          {lang === "zh" ? "EN" : "中文"}
+        <button onClick={() => setLang(lang === "zh" ? "en" : "zh")} aria-label={lang === "zh" ? "Switch to English" : "切換成中文"} title={lang === "zh" ? "English" : "中文"}
+          className="grid h-11 w-11 place-items-center rounded-full border border-ink/14 text-ink">
+          {/* the translate mark: 文 and A */}
+          <svg aria-hidden viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 5h9M7.5 3v2M5 5c.6 3 2.6 5.4 5.5 6.6M10.5 5C9.8 8.4 7.5 10.8 4 12" /><path d="m12 21 4.5-10 4.5 10M13.6 17.5h5.8" />
+          </svg>
         </button>
       )}
     </LangContext.Consumer>
@@ -220,7 +224,8 @@ function RoomPage({ id }: { id: string }) {
   const [mode, setMode] = useState<ViewMode>("blocks");
   const [selected, setSelected] = useState<string | null>(null);
   const [label, setLabel] = useState<{ x: number; y: number } | null>(null);
-  const [tab, setTab] = useState<"chat" | "shop" | "list">("chat");
+  const [tab, setTab] = useState<"chat" | "shop">("chat");
+  const [opened, setOpened] = useState<string[]>([]); // products opened on Shopee by checkout
   const [editing, setEditing] = useState(false);
   const products = useMemo(() => productMap(catalog), [catalog]);
   // Undo: every change to the room (a drag, a nudge, a chat reply, a list edit) can be taken back, up to 50
@@ -362,12 +367,15 @@ function RoomPage({ id }: { id: string }) {
         </section>
         <aside className="-mx-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-[28px] bg-paper-white shadow-float md:mx-0 md:w-[520px] md:flex-none md:rounded-[28px] md:shadow-none">
           <Tabs label={t("roomSections")} value={tab} onChange={setTab}
-            items={[{ key: "chat", label: t("chatTab") }, { key: "shop", label: t("shop"), badge: catalog.length }, { key: "list", label: t("listTab"), badge: state.list.length }]} />
+            items={[{ key: "chat", label: t("chatTab") }, { key: "shop", label: t("shop"), badge: state.list.length || undefined }]} />
           <div className="min-h-0 flex-1">
             {tab === "chat"
-              ? <Chat roomId={id} room={shown} state={state} setState={setState} products={products} turns={turns} setTurns={setTurns} onFocus={setSelected} selected={obj?.id} />
-              : tab === "shop" ? <ShopAll room={shown} state={state} setState={setState} products={products} onFocus={setSelected} swap={obj} onClear={() => setSelected(null)} />
-              : <div className="h-full overflow-y-auto p-4"><ShoppingList state={state} setState={setState} products={products} t={t} /></div>}
+              ? <Chat roomId={id} room={shown} state={state} setState={setState} products={products} turns={turns} setTurns={setTurns} onFocus={setSelected} selected={obj?.id} opened={opened} setOpened={setOpened} />
+              : <div className="h-full overflow-y-auto">
+                  {/* one Shop tab: your list and checkout on top, every product that fits below */}
+                  {state.list.length > 0 && !obj && <div className="px-4 pt-4"><ShoppingList state={state} setState={setState} products={products} t={t} opened={opened} setOpened={setOpened} /></div>}
+                  <ShopAll room={shown} state={state} setState={setState} products={products} onFocus={setSelected} swap={obj} onClear={() => setSelected(null)} />
+                </div>}
           </div>
         </aside>
       </div>

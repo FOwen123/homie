@@ -92,9 +92,12 @@ export function RoomViewer({ room, state, products, mode, selected, onSelect, on
   const { lang } = useLang();
   const [edit, setEdit] = useState<Edit>("move");
   const [hit, setHit] = useState<string | null>(null); // what the selected piece runs into
+  const [light, setLight] = useState(false); // light mode: drag the bulb in 3D, like a lamp in Blender
+  const [bright, setBright] = useState(1);
+  const bulbAt = useRef<THREE.Vector3 | null>(null); // where the user left the light, across room updates
   const dimLabels = useRef<(HTMLSpanElement | null)[]>([]);
-  const live = useRef({ state, products, mode, selected, onSelect, onLabel, onMove, edit, setHit });
-  live.current = { state, products, mode, selected, onSelect, onLabel, onMove, edit, setHit };
+  const live = useRef({ state, products, mode, selected, onSelect, onLabel, onMove, edit, setHit, light, bright });
+  live.current = { state, products, mode, selected, onSelect, onLabel, onMove, edit, setHit, light, bright };
 
   useEffect(() => {
     const el = host.current!;
@@ -110,15 +113,27 @@ export function RoomViewer({ room, state, products, mode, selected, onSelect, on
     controls.minDistance = 1.2;
     controls.maxDistance = 14;
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0xd8e4f0, 1.6));
+    const sky = new THREE.HemisphereLight(0xffffff, 0xd8e4f0, 1.6);
+    scene.add(sky);
     const sun = new THREE.DirectionalLight(0xffffff, 1.6);
-    sun.position.set(2.5, 6, 3.5);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     sun.shadow.bias = -0.0005; // without these, parts shadow themselves in stripes (shadow acne)
     sun.shadow.normalBias = 0.02;
     Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4 });
     scene.add(sun);
+    // The light: a bulb the user drags on all three axes; the sun shines from it at the middle of the room.
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 20, 14), new THREE.MeshBasicMaterial({ color: 0xffe08a }));
+    bulb.position.copy(bulbAt.current ?? new THREE.Vector3(room.shell.width * 0.35, room.shell.height + 0.8, room.shell.depth * 0.4));
+    sun.position.copy(bulb.position);
+    const lamp = new TransformControls(camera, renderer.domElement);
+    lamp.setSpace("world");
+    lamp.addEventListener("objectChange", () => {
+      bulb.position.y = Math.max(bulb.position.y, 0.3); // a light under the floor would leave the room dark
+      sun.position.copy(bulb.position);
+    });
+    lamp.addEventListener("dragging-changed", (e) => { controls.enabled = !e.value; });
+    scene.add(bulb, lamp.getHelper());
 
     const fin = room.finishes;
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(room.shell.width, room.shell.depth),
@@ -182,7 +197,12 @@ export function RoomViewer({ room, state, products, mode, selected, onSelect, on
     const mat = (c: string) => mats.get(c) ?? mats.set(c, new THREE.MeshStandardMaterial({ color: c, roughness: 0.75 })).get(c)!;
 
     const rebuild = () => {
-      const { state, products: pm, mode, selected } = live.current;
+      const { state, products: pm, mode, selected, light, bright } = live.current;
+      sky.intensity = 1.6 * bright;
+      sun.intensity = 1.6 * bright;
+      bulb.visible = light;
+      if (light) lamp.attach(bulb);
+      else lamp.detach();
       blocks.clear();
       products.clear();
       if (mode !== lastMode) { lastMode = mode; home(); }
@@ -207,7 +227,7 @@ export function RoomViewer({ room, state, products, mode, selected, onSelect, on
         if (!p.accepted || selected === p.id) g.add(outline(pr.size, IRIS));
         products.add(g);
       }
-      const target = mode === "blocks" && live.current.onMove ? [...blocks.children, ...products.children].find((c) => c.userData.id === selected) : undefined;
+      const target = mode === "blocks" && live.current.onMove && !light ? [...blocks.children, ...products.children].find((c) => c.userData.id === selected) : undefined;
       if (target) {
         const move = live.current.edit === "move";
         gizmo.attach(target);
@@ -314,7 +334,7 @@ export function RoomViewer({ room, state, products, mode, selected, onSelect, on
     const ray = new THREE.Raycaster();
     let down: { x: number; y: number } | null = null, onGizmo = false;
     // the gizmo's own pointerdown runs first (registered earlier) and sets axis; by pointerup it is cleared
-    const pointerDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY }; onGizmo = !!gizmo.axis; };
+    const pointerDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY }; onGizmo = !!gizmo.axis || !!lamp.axis; };
     const pointerUp = (e: PointerEvent) => {
       if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return; // a drag, not a tap
       if (onGizmo) return; // a tap on the move arrows, not on the room
@@ -380,6 +400,8 @@ export function RoomViewer({ room, state, products, mode, selected, onSelect, on
     });
     return () => {
       view.current = { pos: camera.position.clone(), target: controls.target.clone(), mode: live.current.mode };
+      bulbAt.current = bulb.position.clone();
+      lamp.dispose();
       renderer.setAnimationLoop(null);
       ro.disconnect();
       controls.dispose();
@@ -389,7 +411,7 @@ export function RoomViewer({ room, state, products, mode, selected, onSelect, on
     };
   }, [room]);
 
-  useEffect(() => { api.current?.rebuild(); }, [state, products, mode, selected, edit]);
+  useEffect(() => { api.current?.rebuild(); }, [state, products, mode, selected, edit, light, bright]);
 
   const KEYS: Record<string, Partial<Hold>> = {
     ArrowUp: { fwd: 1 }, w: { fwd: 1 }, ArrowDown: { fwd: -1 }, s: { fwd: -1 },
@@ -423,8 +445,21 @@ export function RoomViewer({ room, state, products, mode, selected, onSelect, on
         <button onClick={() => api.current?.reset()} aria-label={t("reset")} title={t("reset")} className="grid h-11 w-11 place-items-center rounded-full text-graphite">
           <Icon><circle cx="12" cy="12" r="3" /><path d="M12 2v4M12 18v4M2 12h4M18 12h4" /></Icon>
         </button>
+        <button onClick={() => setLight(!light)} aria-pressed={light} aria-label={t("lightMode")} title={t("lightMode")}
+          className={`grid h-11 w-11 place-items-center rounded-full ${light ? "bg-charcoal text-paper-white" : "text-graphite"}`}>
+          <Icon><path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z" /></Icon>
+        </button>
       </div>
-      {selected && mode === "blocks" && onMove && (
+      {light && (
+        <div role="group" aria-label={t("lightMode")} className="absolute right-16 bottom-3 flex w-48 flex-col gap-2 rounded-[20px] bg-paper-white/95 p-3 shadow-float md:top-3 md:right-3 md:bottom-auto md:w-56">
+          <p className="hidden text-[13px] text-graphite md:block">{t("lightHint")}</p>
+          <label className="flex items-center gap-2 text-[13px]">
+            {t("brightness")}
+            <input type="range" min={0.3} max={2.5} step={0.05} value={bright} onChange={(e) => setBright(Number(e.target.value))} className="min-w-0 flex-1 accent-charcoal" />
+          </label>
+        </div>
+      )}
+      {selected && mode === "blocks" && onMove && !light && (
         <div role="group" aria-label={t("editPiece")} className="absolute top-3 right-3 flex flex-col items-end gap-1.5">
           <div className="flex rounded-full bg-paper-white/90 p-1 shadow-float">
             {(["move", "rotate"] as const).map((m) => (
