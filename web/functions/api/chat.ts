@@ -8,7 +8,7 @@ import { type Env, json, loadCatalog, loadRoom, meta, underLimit } from "../_lib
 const MODEL = "muse-spark-1.3"; // standard mode: visitors' chats and photos stay out of model training
 const MAX_STEPS = 8; // agreed room plan: search, show, place, add to list, reply (with room to spare)
 const MAX_BODY = 1_500_000; // the client shrinks photos to ~768 px JPEG, well under this
-const MAX_OUT = 800; // output tokens per model call
+const MAX_OUT = 1200; // output tokens per model call (a 4-item plan plus reasoning fits)
 
 const tools = [
   fn("search_products", "Search the cached Shopee Taiwan catalog. Returns up to 8 products with price, size and category.", {
@@ -205,10 +205,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const picked = objectById(objIds.has(String(body.selected)) ? String(body.selected) : undefined); // tapped in the 3D view
   const context = describeRoom(room, state, pm) + (picked ? `\nThe user has tapped ${picked.id} (${picked.label}) in the 3D view; "this" or "it" means that object.` : "");
   const messages: any[] = [{ role: "system", content: SYSTEM(body.lang, context) }, ...history];
+  let retried = false;
   try {
     for (let step = 0; step < MAX_STEPS; step++) {
       const r = await meta(env, "/chat/completions", { model: MODEL, reasoning_effort: "low", messages, tools, max_tokens: MAX_OUT });
       const msg = r.choices[0].message;
+      if (!msg.tool_calls?.length && !msg.content?.trim() && !retried) { retried = true; continue; } // an empty turn now and then: ask again once
       messages.push(msg);
       if (!msg.tool_calls?.length) return json({ reply: msg.content ?? "", state, cards: tidy(cards) });
       for (const call of msg.tool_calls) {

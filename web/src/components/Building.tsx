@@ -22,7 +22,7 @@ export function Building({ status }: { status: RoomStatus }) {
     <div className="rounded-[24px] bg-paper-white p-5 shadow-float">
       <ol className="grid grid-cols-4 gap-2">
         {STEPS.map((s, i) => (
-          <li key={s.stage} aria-current={i === at ? "step" : undefined} className={`flex flex-col gap-1.5 text-[13px] ${i > at ? "text-fog" : "text-ink"}`}>
+          <li key={s.stage} aria-current={i === at ? "step" : undefined} className={`flex min-w-0 flex-col gap-1.5 text-[12px] leading-tight [overflow-wrap:anywhere] sm:text-[13px] ${i > at ? "text-fog" : "text-ink"}`}>
             <span aria-hidden className={`h-1.5 rounded-full ${i < at ? "bg-iris" : i === at ? "pulse-dot bg-powder-blue" : "bg-mist-gray"}`} />
             {t(s.label)}
           </li>

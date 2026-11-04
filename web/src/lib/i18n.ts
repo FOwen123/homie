@@ -37,6 +37,7 @@ const T = {
   upPrivacy: { zh: "影片不會離開你的手機：只上傳約 60 張畫面，處理完就刪除。你的房間會有一個私人連結，30 天後自動刪除。", en: "The video stays on your phone: only about 60 still frames are sent, and they're deleted after processing. Your room gets a private link and is deleted after 30 days." },
   dropHere: { zh: "把影片拖到這裡，或", en: "Drop a video here, or" },
   qrHint: { zh: "用手機掃描這個 QR code，在手機上開啟這一頁。", en: "Scan this QR code to open this page on your phone." },
+  roughVideo: { zh: "一般影片：尺寸為估計值", en: "plain video: sizes are rough" },
   preparing: { zh: "準備影格中…", en: "Picking frames…" },
   uploading: { zh: "上傳中…", en: "Uploading…" },
   errTooLong: { zh: "影片超過 90 秒，請拍短一點。", en: "That video is over 90 seconds. Film a shorter walk." },

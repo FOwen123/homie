@@ -249,30 +249,30 @@ function RoomPage({ id }: { id: string }) {
   });
 
   useEffect(() => {
-    // A room is ready once room.json has its judge step. Until then (or without one) poll the build status every 3 s.
-    const live = { alive: true, timer: 0, stage: undefined as string | undefined, haveRoom: false };
+    // Uploaded rooms: poll the build status every 3 s and re-read room.json each time, so pieces appear as the
+    // builders finish; "done" is the processor's word, not room.json's. The demo room is static.
+    const live = { alive: true, timer: 0 };
     const show = (r: Room | null) => {
-      if (r && (r.judge || (r.objects?.length && r.keyframes?.length))) { live.haveRoom = true; setRoom(r); } // partial rooms wait for objects and keyframes
+      if (r && (r.judge || (r.objects?.length && r.keyframes?.length))) setRoom(r); // partial rooms wait for objects and keyframes
     };
+    const again = () => { live.timer = window.setTimeout(tick, 3000); };
     const tick = async () => {
       const s = await getJson<Partial<RoomStatus>>(`/api/status/${id}`);
       if (!live.alive) return;
-      if (!s) { live.timer = window.setTimeout(tick, 3000); return; } // server hiccup: ask again
+      if (!s) return again(); // server hiccup: ask again
       const next: RoomStatus = s.state ? (s as RoomStatus) : { state: "failed", error: s.error };
       setStatus(next);
       if (next.state === "failed") return;
-      if (next.stage !== live.stage || !live.haveRoom || next.state === "done") {
-        live.stage = next.stage;
-        show(await getJson<Room>(`${url}/room.json`));
-        if (!live.alive) return;
-      }
-      if (next.state !== "done") live.timer = window.setTimeout(tick, 3000);
+      const r = await getJson<Room>(`${url}/room.json`);
+      if (!live.alive) return;
+      show(r);
+      if (next.state !== "done" || !r) again(); // done but the final file not readable yet: once more
     };
     void (async () => {
       const r = await getJson<Room>(`${url}/room.json`);
       if (!live.alive) return;
       show(r);
-      if (!r?.judge) void tick();
+      if (id !== "demo") void tick();
     })();
     return () => { live.alive = false; window.clearTimeout(live.timer); };
   }, [id, url]);
@@ -322,7 +322,8 @@ function RoomPage({ id }: { id: string }) {
         <span className="flex min-w-0 items-center gap-2 text-[15px] md:border-l md:border-ink/14 md:pl-4">
           <span className="hidden truncate sm:inline">{t(id === "demo" ? "roomDemo" : "roomMine")}</span>
           <span className="num truncate text-[13px] text-graphite">
-            {(area / 3.3058).toFixed(1)} 坪 · {area.toFixed(1)} m²<span className="sr-only"> · {dims({ w: room.shell.width, d: room.shell.depth, h: room.shell.height })}</span>
+            {room.capture === "video" && "≈ "}{(area / 3.3058).toFixed(1)} 坪 · {area.toFixed(1)} m²<span className="sr-only"> · {dims({ w: room.shell.width, d: room.shell.depth, h: room.shell.height })}</span>
+            {room.capture === "video" && <span className="hidden sm:inline"> · {t("roughVideo")}</span>}
           </span>
         </span>
       </Header>

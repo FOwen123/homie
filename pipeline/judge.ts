@@ -88,8 +88,14 @@ async function apply(view: number, f: any) {
   const M = room.keyframes[view].cam_to_room, right = col(M, 1), fwd = col(M, 2).map((v) => -v);
   if (f.action === "move") {
     const r = clamp(f.right_m ?? 0, -0.4, 0.4), d = clamp(f.forward_m ?? 0, -0.4, 0.4);
+    const touching = gaps(o).list.filter((g) => g[2] < 0.05); // a piece at a wall stays at it: it may only slide along
     o.center[0] += r * right[0] + d * fwd[0];
     o.center[2] += r * right[2] + d * fwd[2];
+    for (const [x, z] of touching) {
+      const gap = gaps(o).list.find((g) => g[0] === x && g[1] === z)![2];
+      o.center[0] += x * (gap - 0.01);
+      o.center[2] += z * (gap - 0.01);
+    }
   } else if (f.action === "against_wall") {
     const g = gaps(o), [x, z, gap] = g.list[0];
     if (gap > 0.6) return false; // too far to be the wall it stands against
@@ -158,14 +164,17 @@ for (let round = 1; round <= ROUNDS + 1; round++) {
     break;
   }
   if (!better) results = await ask();
-  // simple fixes land at once; rebuilds run side by side, one per object
-  const jobs: Promise<boolean>[] = [], rebuilding = new Set<string>();
+  // one object's fixes run in order (a recolor must not land on parts a rebuild is about to replace); different
+  // objects, and so their rebuilds, run side by side; at most one rebuild per object per round
+  const jobs: Promise<boolean>[] = [], chains = new Map<string, Promise<unknown>>(), rebuilding = new Set<string>();
   for (const r of results) for (const f of r.fixes.slice(0, 5)) {
     if (f.action === "rebuild" || f.action === "face_room") {
       if (rebuilding.has(f.object_id)) continue;
       rebuilding.add(f.object_id);
     }
-    jobs.push(apply(r.v, f));
+    const job = (chains.get(f.object_id) ?? Promise.resolve()).then(() => apply(r.v, f));
+    chains.set(f.object_id, job);
+    jobs.push(job);
   }
   const applied = (await Promise.all(jobs)).filter(Boolean).length;
   history.push({ round, scores, fixes: applied, kept: better, issues: results.map((r) => r.issues) });

@@ -151,12 +151,15 @@ def process(rid: str, kind: str):
         if proc.wait() != 0:
             raise RuntimeError("".join(tail)[-400:])
         shutil.rmtree(bundle / ".work", ignore_errors=True)
+        data.commit()  # the final room is readable before anyone hears "done"
         set_status(rid, state="done", stage="done", detail="")
     except Exception as e:  # noqa: BLE001 (the visitor sees the reason)
         print(rid, e)
         set_status(rid, state="failed", error=str(e)[-300:])
     finally:
-        shutil.rmtree(cap, ignore_errors=True)  # raw uploads never outlive processing
+        # raw uploads and everything made from them (frames, MapAnything points, masks) never outlive processing
+        for d in (cap, Path("/tmp") / rid, bundle / ".work"):
+            shutil.rmtree(d, ignore_errors=True)
         data.commit()
 
 
@@ -208,10 +211,21 @@ def web():
                     raise ValueError("too big")
                 out.write(chunk)
 
+    def too_big(req: Request):
+        """Refuse before the body is read: the multipart parser would spool any size to disk first."""
+        n = req.headers.get("content-length", "")
+        if not n.isdigit():
+            return JSONResponse({"error": "length required"}, 411)
+        if int(n) > MAX_VIDEO:
+            return JSONResponse({"error": "upload too big"}, 413)
+        return None
+
     @api.post("/upload")
     async def upload(req: Request):
         if not authed(req):
             return JSONResponse({"error": "unauthorized"}, 401)
+        if (too := too_big(req)):
+            return too
         form = await req.form()
         if any(not hasattr(form.get(n), "read") for n in FILES):
             return JSONResponse({"error": "bad upload"}, 400)
@@ -226,13 +240,14 @@ def web():
 
     @api.post("/upload-video")
     async def upload_video(req: Request):
-        exp, _, sig = req.headers.get("x-homie-ticket", "").partition(".")
-        good = hmac.new(token.encode(), exp.encode(), hashlib.sha256).hexdigest()
-        if not exp.isdigit() or int(exp) < time.time() or not hmac.compare_digest(sig, good):
+        exp, nonce, sig = (req.headers.get("x-homie-ticket", "").split(".") + ["", "", ""])[:3]
+        good = hmac.new(token.encode(), f"{exp}.{nonce}".encode(), hashlib.sha256).hexdigest()
+        if not exp.isdigit() or int(exp) < time.time() or not nonce or not hmac.compare_digest(sig, good):
             return JSONResponse({"error": "ticket expired, try again"}, 403)
-        if status.get(f"ticket:{sig}"):
+        if not status.put(f"ticket:{nonce}", 1, skip_if_exists=True):  # atomic: one upload per ticket
             return JSONResponse({"error": "ticket already used"}, 403)
-        status[f"ticket:{sig}"] = 1
+        if (too := too_big(req)):
+            return too
         form = await req.form(max_files=MAX_FRAMES + 1)
         f, stills = form.get("video"), [x for x in form.getlist("frames") if hasattr(x, "read")]
         if not hasattr(f, "read") and not 8 <= len(stills) <= MAX_FRAMES:
