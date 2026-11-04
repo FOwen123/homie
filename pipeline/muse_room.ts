@@ -12,7 +12,7 @@ import { chatJSON, dataUrl, spent } from "./meta";
 const [frames, bundle] = process.argv.slice(2);
 if (!frames || !bundle) throw new Error("usage: bun pipeline/muse_room.ts <upright_frames_dir> <bundle_dir>");
 const MODEL = process.env.SEGMENT_MODEL ?? "muse-spark-1.3";
-const N = Number(process.env.ROOM_FRAMES ?? 12); // 12 frames at medium effort: ~3 min; 16 at high: 4.5-9 min, about as accurate
+const N = Number(process.env.ROOM_FRAMES ?? 12);
 process.env.META_TIMEOUT_MS ??= "480000"; // one long look at all frames: 3-6 min is normal, and a retry costs more than waiting
 
 const WALLS = ["A", "B", "C", "D"] as const;
@@ -71,7 +71,8 @@ for (const [i, k] of kfNames.entries()) {
   content.push({ type: "text", text: `frame ${i}` }, { type: "image_url", image_url: { url: await dataUrl(small) } });
   await $`rm -f ${small}`;
 }
-const plan = await chatJSON(MODEL, content, SCHEMA, "room", 2, process.env.ROOM_EFFORT ?? "medium");
+// low: ~1.5 min, demo room +17% / −7%; medium ~3 min, +24% / +11%; high 4.5-9 min, +20% / +9%
+const plan = await chatJSON(MODEL, content, SCHEMA, "room", 2, process.env.ROOM_EFFORT ?? "low");
 await Bun.write(join(bundle, ".plan.json"), JSON.stringify(plan, null, 1)); // Muse's raw answer, for debugging (never served)
 
 // Room coordinates: x to the right when facing wall A, z away from A, y up; A at z = -D/2, B at x = +W/2.
