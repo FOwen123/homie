@@ -164,6 +164,20 @@ export const moveIn = (state: RoomState, id: string, pose: Pose): RoomState => s
   ? { ...state, placements: state.placements.map((p) => (p.id === id ? { ...p, ...pose } : p)) }
   : { ...state, moved: { ...state.moved, [id]: pose } };
 
+/** Apply what the user changed while the agent was thinking (`sent` → `cur`) on top of the agent's reply. */
+export function keepLocal(sent: RoomState, cur: RoomState, out: RoomState): RoomState {
+  const ids = (l: { id: string }[]) => new Set(l.map((p) => p.id));
+  const sentIds = ids(sent.placements), curIds = ids(cur.placements);
+  const changed = new Map(cur.placements.filter((p) => !sentIds.has(p.id) || !sent.placements.includes(p)).map((p) => [p.id, p]));
+  const placements = out.placements.filter((p) => !sentIds.has(p.id) || curIds.has(p.id)).map((p) => changed.get(p.id) ?? p);
+  for (const p of changed.values()) if (!placements.some((x) => x.id === p.id)) placements.push(p);
+  const edits = <T,>(a: Record<string, T> = {}, b: Record<string, T> = {}, o: Record<string, T> = {}) =>
+    ({ ...o, ...Object.fromEntries(Object.entries(b).filter(([k, v]) => a[k] !== v)) });
+  const list = (s: string[], c: string[], o: string[]) => [...new Set([...o.filter((x) => !s.includes(x) || c.includes(x)), ...c.filter((x) => !s.includes(x))])];
+  return { ...out, placements, moved: edits(sent.moved, cur.moved, out.moved), sizeEdits: edits(sent.sizeEdits, cur.sizeEdits, out.sizeEdits),
+    list: list(sent.list, cur.list, out.list), removed: list(sent.removed, cur.removed, out.removed) };
+}
+
 /** What a moved piece now runs into: "wall", "door-zone" (the 60 cm in front of the door), another piece's
  *  label, or null. `room` has the moves applied. */
 export function collision(room: Room, state: RoomState, products: Map<string, Product>, id: string): string | null {

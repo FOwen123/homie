@@ -38,7 +38,9 @@ export async function call(path: string, body: any, stream = false): Promise<Res
 }
 
 /** Chat completion that returns parsed JSON content and records token cost. */
-export async function chatJSON(model: string, content: unknown[], schema: object, name = "out", tries = 3): Promise<any> {
+// shortcut: a call that timed out may still have been billed, and is retried once (≤ US$0.01 per judge/parts
+// call) because a stuck call used to hang the whole pipeline; use idempotency keys if the Meta API adds them.
+export async function chatJSON(model: string, content: unknown[], schema: object, name = "out", tries = 2): Promise<any> {
   try {
     return await chatOnce(model, content, schema, name);
   } catch (e: any) {

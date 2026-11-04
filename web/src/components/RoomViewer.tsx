@@ -374,7 +374,7 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
       if (onGizmo) return; // a tap on the move arrows, not on the room
       const rect = renderer.domElement.getBoundingClientRect();
       ray.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
-      const hit = ray.intersectObjects([...blocks.children, ...products.children], true)[0];
+      const hit = ray.intersectObjects([blocks, products].filter((g) => g.visible).flatMap((g) => g.children), true)[0]; // raycasts ignore .visible
       let o: THREE.Object3D | null = hit?.object ?? null;
       while (o && !o.userData.id) o = o.parent;
       live.current.onSelect(o?.userData.id ?? null);
@@ -414,7 +414,7 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
       }
       const { selected, onLabel } = live.current;
       if (onLabel) {
-        const g = [...blocks.children, ...products.children].find((c) => c.userData.id === selected);
+        const g = [blocks, products].filter((x) => x.visible).flatMap((x) => x.children).find((c) => c.userData.id === selected);
         if (g) {
           const box = new THREE.Box3().setFromObject(g);
           v.set((box.min.x + box.max.x) / 2, box.max.y, (box.min.z + box.max.z) / 2).project(camera);

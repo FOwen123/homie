@@ -100,7 +100,8 @@ def score(views, p):
     ious = []
     for k, m in views:
         b = box_mask(k, corners(*p))
-        if b is None:
+        if b is None:  # a corner behind this camera: counts as a miss, or boxes could escape hard views
+            ious.append(0.0)
             continue
         inter = (b & m).sum()
         denom = m.sum() + 0.5 * (b.sum() - inter)

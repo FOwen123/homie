@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { SWAP, checkFit, findSpot, replaceSpot } from "../lib/fit";
+import { SWAP, checkFit, findSpot, keepLocal, replaceSpot } from "../lib/fit";
 import { LABEL_ZH, LangContext, useLang, useT } from "../lib/i18n";
 import type { Card, ChatTurn, FitResult, Placement, Product, Room, RoomObject, RoomState } from "../lib/types";
 import { ProductCard, dims, ntd } from "./bits";
@@ -39,14 +39,7 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
         body: JSON.stringify({ roomId, lang, messages: next.map(({ role, text, image }) => ({ role, text, image })), state, selected }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error === "busy" ? t("busy") : j.error);
-      // the reply carries the state as it was sent: keep anything the user moved while waiting
-      setState((cur) => {
-        const out: RoomState = j.state, sent = state;
-        const moved = { ...out.moved };
-        for (const [id, m] of Object.entries(cur.moved ?? {})) if (m !== sent.moved?.[id]) moved[id] = m;
-        const mine = new Map(cur.placements.filter((p) => { const s = sent.placements.find((x) => x.id === p.id); return s && s !== p; }).map((p) => [p.id, p]));
-        return { ...out, moved, placements: out.placements.map((p) => (mine.has(p.id) ? { ...p, x: mine.get(p.id)!.x, z: mine.get(p.id)!.z, yaw: mine.get(p.id)!.yaw } : p)) };
-      });
+      setState((cur) => keepLocal(state, cur, j.state)); // the reply is built on the state as it was sent
       const placed = j.state.placements.at(-1) as Placement | undefined;
       if (placed && placed.id !== state.placements.at(-1)?.id) onFocus(placed.id);
       for (const c of j.cards as Card[]) {
