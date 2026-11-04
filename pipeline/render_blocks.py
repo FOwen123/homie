@@ -56,9 +56,13 @@ def solids(sample=None):
                 cx, cz = ax + ux * tm + uz * 0.03, az + uz * tm - ux * 0.03
                 yield box([cx, y0, cz], [tl, th, 0.06], yaw), fin.get("wall", "#f3efe6")
         for o in holes:  # fill each opening with the colour the real photo shows there (a red door stays red)
-            tm, ym = (o["from"] + o["to"]) / 2, o["bottom"] + 0.3 * (o["top"] - o["bottom"])  # low: coats often hang on doors
+            tm = (o["from"] + o["to"]) / 2
             centre = [ax + ux * tm + uz * 0.02, o["bottom"], az + uz * tm - ux * 0.02]
-            colour = sample([ax + ux * tm, ym, az + uz * tm]) if sample else None
+            # median over a 3×3 grid on the opening: coats or a curtain cover part of it, rarely most of it
+            grid = [sample([ax + ux * (o["from"] + f * (o["to"] - o["from"])), o["bottom"] + g * (o["top"] - o["bottom"]), az + uz * (o["from"] + f * (o["to"] - o["from"]))])
+                    for f in (0.2, 0.5, 0.8) for g in (0.2, 0.5, 0.8)] if sample else []
+            grid = [hexrgb(c) for c in grid if c]
+            colour = "#%02x%02x%02x" % tuple(np.median(grid, axis=0).astype(int)) if grid else None
             yield box(centre, [o["to"] - o["from"], o["top"] - o["bottom"], 0.02], yaw), colour or "#8a8f99"
     for o in room["objects"]:
         base = [o["center"][0], max(0.0, o["center"][1] - o["size"]["h"] / 2), o["center"][2]]

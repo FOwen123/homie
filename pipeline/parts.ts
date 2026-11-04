@@ -33,7 +33,22 @@ const prompt = (o: any) =>
   `Coordinates: origin at the centre of its footprint on the floor, y up, the front faces +z. Every part must stay inside ` +
   `x ∈ [${(-o.size.w / 2).toFixed(2)}, ${(o.size.w / 2).toFixed(2)}], y ∈ [0, ${o.size.h.toFixed(2)}], z ∈ [${(-o.size.d / 2).toFixed(2)}, ${(o.size.d / 2).toFixed(2)}]. ` +
   `Use the real colours you see (hex). Capture the recognisable structure (legs, top, drawers, backrest, shade) but no tiny details. ` +
-  `Ignore loose clutter on top of it. White areas in the photo are background, not part of the object.`;
+  `Ignore loose clutter on top of it. White areas in the photo are background, not part of the object. ` +
+  `A patterned surface (stripes, prints, checks) is one part in its main colour: don't model the pattern.` +
+  (o.label === "bed" ? ` The bed is long along ${long(o) === 0 ? "x" : "z"}; its headboard spans the short side at the ${long(o) === 0 ? "-x" : "-z"} end.` : "");
+const long = (o: any) => (o.size.w >= o.size.d ? 0 : 2); // part axis the object is long along
+
+// A bed's head is the end against a wall: Muse can't tell which end that is from a crop, so code mirrors it.
+function headToWall(o: any, parts: any[]) {
+  const a = long(o), L = (a === 0 ? o.size.w : o.size.d) / 2, c = Math.cos(o.yaw), s = Math.sin(o.yaw);
+  const end = (sign: number) => { const lx = a === 0 ? sign * L : 0, lz = a === 2 ? sign * L : 0; return [o.center[0] + lx * c + lz * s, o.center[2] - lx * s + lz * c]; };
+  const toWall = ([x, z]: number[]) => Math.min(...room.shell.walls.map((w: any) => {
+    const [ax, az] = w.a, dx = w.b[0] - ax, dz = w.b[1] - az, t = clamp(((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz), 0, 1);
+    return Math.hypot(x - ax - t * dx, z - az - t * dz);
+  }));
+  if (toWall(end(1)) < toWall(end(-1))) for (const p of parts) p.pos[a] = -p.pos[a];
+  return parts;
+}
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 function enforce(o: any, parts: any[]) {
@@ -55,6 +70,7 @@ await Promise.all(Array.from({ length: 4 }, async () => {
     try {
       const r = await chatJSON(MODEL, [{ type: "text", text: prompt(o) }, { type: "image_url", image_url: { url: await dataUrl(join(dir, o.crop)) } }], PARTS, "parts");
       o.parts = enforce(o, r.parts);
+      if (o.label === "bed") headToWall(o, o.parts);
       console.log(`${o.id} ${o.label}: ${o.parts.length} parts`);
     } catch (e: any) {
       console.error(`${o.id} ${o.label}: ${e.message}`);

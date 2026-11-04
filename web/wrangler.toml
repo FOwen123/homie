@@ -1,5 +1,5 @@
-# Cloudflare Pages project for the Roomie website + API functions (web/functions).
-name = "roomie-tw"
+# Cloudflare Pages project for the Homie website + API functions (web/functions).
+name = "homie-tw"
 pages_build_output_dir = "dist"
 compatibility_date = "2026-11-01"
 

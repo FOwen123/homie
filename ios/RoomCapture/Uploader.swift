@@ -1,9 +1,9 @@
 import Foundation
 
-/// Uploads a finished capture to the Roomie website and follows processing until the room page is live.
+/// Uploads a finished capture to the Homie website and follows processing until the room page is live.
 @MainActor
 final class Uploader: ObservableObject {
-    static let site = URL(string: "https://roomie-tw.pages.dev")!
+    static let site = URL(string: "https://homie-tw.pages.dev")!
     enum Phase: Equatable { case idle, uploading, processing(String), done(URL), failed(String) }
     @Published var phase: Phase = .idle
 
@@ -40,7 +40,7 @@ final class Uploader: ObservableObject {
         let (data, res) = try await URLSession.shared.upload(for: req, fromFile: body)
         let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         guard (res as? HTTPURLResponse)?.statusCode == 200, let id = json?["id"] as? String else {
-            throw NSError(domain: "Roomie", code: 1, userInfo: [NSLocalizedDescriptionKey: (json?["error"] as? String) ?? "Upload failed"])
+            throw NSError(domain: "Homie", code: 1, userInfo: [NSLocalizedDescriptionKey: (json?["error"] as? String) ?? "Upload failed"])
         }
         return id
     }
@@ -52,7 +52,7 @@ final class Uploader: ObservableObject {
             let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
             switch json["state"] as? String {
             case "done": phase = .done(Self.site.appendingPathComponent("room/\(id)")); return
-            case "failed": throw NSError(domain: "Roomie", code: 2, userInfo: [NSLocalizedDescriptionKey: (json["error"] as? String) ?? "Processing failed"])
+            case "failed": throw NSError(domain: "Homie", code: 2, userInfo: [NSLocalizedDescriptionKey: (json["error"] as? String) ?? "Processing failed"])
             case "publishing": phase = .processing("Publishing your room…")
             default: phase = .processing((json["step"] as? String).map { "Processing: \($0)" } ?? "Waiting in line…")
             }

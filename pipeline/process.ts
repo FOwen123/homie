@@ -1,12 +1,12 @@
 // One command from a Room Capture recording to a website room bundle:
-//   keyframes → Muse labels + SAM masks → measurements → room.json → Muse parts → splat.
-// Usage: bun pipeline/process.ts <capture_dir> <bundle_dir> [--no-splat]
+//   keyframes → Muse labels + SAM masks → measurements → room.json → fit + crops → Muse parts → judge.
+// Usage: bun pipeline/process.ts <capture_dir> <bundle_dir>
 import { $ } from "bun";
 import { mkdir, cp } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 const [capture, bundle] = process.argv.slice(2).map((p) => resolve(p));
-if (!capture || !bundle) throw new Error("usage: bun pipeline/process.ts <capture_dir> <bundle_dir> [--no-splat]");
+if (!capture || !bundle) throw new Error("usage: bun pipeline/process.ts <capture_dir> <bundle_dir>");
 const work = join(bundle, ".work");
 const py = (script: string, ...args: string[]) =>
   $`uv run -q --with numpy --with pillow python ${join(import.meta.dir, script)} ${args}`;
@@ -25,16 +25,9 @@ await step("measure on ARKit planes", () => py("measure.py", capture, join(work,
 await step("room shell + objects", () => py("room.py", capture, join(work, "seg"), join(work, "kf"), join(work, "measure.json"), bundle));
 await step("line furniture up with the walls", () => py("layout.py", bundle));
 await cp(join(work, "kf"), join(bundle, "keyframes"), { recursive: true });
-await step("furniture parts + finishes (Muse)", () => $`bun ${join(import.meta.dir, "parts.ts")} ${bundle}`.quiet());
-await step("fit estimated pieces to their outlines", () => py("fit_boxes.py", bundle, join(work, "seg")));
+await step("fit estimated pieces to their outlines, one crop each", () => py("fit_boxes.py", bundle, join(work, "seg")));
 await step("line up again after fitting", () => py("layout.py", bundle));
+await step("furniture parts + finishes (Muse)", () => $`bun ${join(import.meta.dir, "parts.ts")} ${bundle}`.quiet());
 await step("judge: blocks vs real frames (Muse)", () => $`bun ${join(import.meta.dir, "judge.ts")} ${bundle}`.quiet());
 await step("re-square after the judge's moves", () => py("layout.py", bundle));
-await step("full-resolution photos for the Real view", () => py("photos.py", capture, bundle));
-if (!process.argv.includes("--no-splat")) {
-  await step("splat dataset", () => $`uv run -q --with numpy python ${join(import.meta.dir, "splat_dataset.py")} ${capture} ${join(work, "splat_ds")} 10 960`.quiet());
-  await step("splat fit (msplat)", () =>
-    $`uv run -q --with msplat --with numpy --with pillow python ${join(import.meta.dir, "splat_train.py")} ${join(work, "splat_ds")} ${join(work, "room.ply")} 7000`.quiet());
-  await step("splat pack", () => $`uv run -q --with numpy python ${join(import.meta.dir, "splat_pack.py")} ${join(work, "room.ply")} ${join(bundle, "room.splat")}`.quiet());
-}
 console.log(`done → ${bundle}`);

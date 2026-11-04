@@ -36,8 +36,9 @@ for (const third of [0, 1, 2]) {
 }
 
 const SCHEMA = {
-  type: "object", additionalProperties: false, required: ["score", "fixes"],
+  type: "object", additionalProperties: false, required: ["score", "issues", "fixes"],
   properties: {
+    issues: { type: "array", items: { type: "string" }, description: "the 1-3 biggest mismatches that cost points, a few words each" },
     score: { type: "integer", description: "0-10: how well the right image matches the left in layout, size and colour" },
     fixes: { type: "array", items: { type: "object", additionalProperties: false, required: ["object_id", "action"],
       properties: {
@@ -53,7 +54,7 @@ const SCHEMA = {
 const prompt = (objs: any[]) =>
   `Left: a real photo of a room. Right: our 3D block model of the same room, drawn from the exact same camera position. ` +
   `Score 0-10 how well the blocks match the photo (positions, sizes, colours; ignore missing small clutter and the simple block style). ` +
-  `Then list at most 5 concrete fixes for the biggest mismatches, using only these object ids:\n` +
+  `Name the 1-3 biggest mismatches that cost points, then list at most 5 concrete fixes for the biggest mismatches, using only these object ids:\n` +
   objs.map((o) => `${o.id} = ${o.label}, ${Math.round(o.size.w * 100)}×${Math.round(o.size.d * 100)}×${Math.round(o.size.h * 100)} cm`).join("\n") +
   `\nOnly fix objects you can clearly see in both images. Moves are relative to this camera view.`;
 
@@ -86,7 +87,7 @@ function apply(view: number, f: any) {
   return true;
 }
 
-const history: { round: number; scores: number[]; fixes: number; kept: boolean }[] = [];
+const history: { round: number; scores: number[]; fixes: number; kept: boolean; issues: string[][] }[] = [];
 const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
 // Render the current layout from the 3 views and ask Muse for a score and fixes per view.
 async function ask() {
@@ -115,17 +116,17 @@ for (let round = 1; round <= ROUNDS + 1; round++) {
     console.log(`round ${round}: scores ${scores.join(", ")} not better, last fixes reverted`);
   }
   if ((better && scores.every((s) => s >= PASS)) || round > ROUNDS || (!better && ++misses >= 2)) {
-    history.push({ round, scores, fixes: 0, kept: better });
+    history.push({ round, scores, fixes: 0, kept: better, issues: results.map((r) => r.issues) });
     break;
   }
   if (!better) results = await ask();
   let applied = 0;
   for (const r of results) for (const f of r.fixes.slice(0, 5)) applied += Number(apply(r.v, f));
-  history.push({ round, scores, fixes: applied, kept: better });
-  console.log(`round ${round}: scores ${scores.join(", ")} · ${applied} fixes applied`);
+  history.push({ round, scores, fixes: applied, kept: better, issues: results.map((r) => r.issues) });
+  console.log(`round ${round}: scores ${scores.join(", ")} · ${applied} fixes applied · ${results.map((r) => r.issues.join("; ")).join(" | ")}`);
   if (!applied) break;
 }
 const kept = history.filter((h) => h.kept).at(-1)!;
-room.judge = { model: MODEL, views, rounds: history, final: kept.scores };
+room.judge = { model: MODEL, views, rounds: history, final: kept.scores, issues: kept.issues };
 await Bun.write(roomPath, JSON.stringify(room, null, 1));
 console.log(`judge final scores ${room.judge.final.join(", ")} after ${history.length} round(s) · Muse spend so far $${spent().toFixed(3)}`);
