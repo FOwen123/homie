@@ -1,5 +1,7 @@
 // Judge loop: render the block room from 3 real camera poses next to the real frames, ask Muse what's
-// wrong, apply its fixes (clamped by code), repeat up to 3 rounds or until every view scores ≥ 8/10.
+// wrong, apply its fixes (clamped by code), repeat up to 6 rounds or until every view scores ≥ 8/10.
+// Muse scores a little differently each time, so a round that doesn't help is undone and the next round
+// asks again from the best layout so far; two bad rounds in a row end it.
 // Scores per round are saved in room.json → "judge" for the quality panel.
 // Usage: bun pipeline/judge.ts <bundle_dir>
 import { $ } from "bun";
@@ -10,7 +12,7 @@ import { chatJSON, dataUrl, spent } from "./meta";
 const dir = process.argv[2];
 if (!dir) throw new Error("usage: bun pipeline/judge.ts <bundle_dir>");
 const MODEL = process.env.JUDGE_MODEL ?? "muse-spark-1.3";
-const ROUNDS = 3, PASS = 8;
+const ROUNDS = Number(process.env.JUDGE_ROUNDS ?? 6), PASS = 8; // JUDGE_ROUNDS=0: score only
 const roomPath = join(dir, "room.json");
 const room = await Bun.file(roomPath).json();
 const work = join(tmpdir(), "roomie-judge", basename(dir)); // outside the bundle, so it is never published
@@ -86,32 +88,40 @@ function apply(view: number, f: any) {
 
 const history: { round: number; scores: number[]; fixes: number; kept: boolean }[] = [];
 const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
-let snapshot = JSON.stringify(room.objects), best = -1;
-for (let round = 1; round <= ROUNDS + 1; round++) {
+// Render the current layout from the 3 views and ask Muse for a score and fixes per view.
+async function ask() {
   await Bun.write(roomPath, JSON.stringify(room, null, 1));
   await $`uv run -q --with numpy --with pillow python ${join(import.meta.dir, "render_blocks.py")} ${dir} ${work} ${views.map(String)}`.quiet();
-  const results = await Promise.all(views.map(async (v) => {
+  return Promise.all(views.map(async (v) => {
     const objs = room.objects.filter((o: any) => visible(room.keyframes[v], o.center));
     const r = await chatJSON(MODEL, [{ type: "text", text: prompt(objs) }, { type: "image_url", image_url: { url: await dataUrl(join(work, `judge_${v}.jpg`)) } }], SCHEMA, "judge");
     return { v, ...r };
   }));
+}
+
+let snapshot = JSON.stringify(room.objects), best = -1, misses = 0;
+for (let round = 1; round <= ROUNDS + 1; round++) {
+  let results = await ask();
   const scores = results.map((r) => r.score);
-  // Keep the last round's fixes only if they made the match better; otherwise undo them and stop.
-  if (best >= 0 && mean(scores) <= best) {
+  // Keep the last round's fixes only if they made the match better; otherwise undo them and ask for new
+  // fixes on the best layout (fixes proposed for a layout we just threw away would point the wrong way).
+  const better = best < 0 || mean(scores) > best;
+  if (better) {
+    best = mean(scores);
+    snapshot = JSON.stringify(room.objects);
+    misses = 0;
+  } else {
     room.objects = JSON.parse(snapshot);
-    history.push({ round, scores, fixes: 0, kept: false });
     console.log(`round ${round}: scores ${scores.join(", ")} not better, last fixes reverted`);
+  }
+  if ((better && scores.every((s) => s >= PASS)) || round > ROUNDS || (!better && ++misses >= 2)) {
+    history.push({ round, scores, fixes: 0, kept: better });
     break;
   }
-  best = mean(scores);
-  snapshot = JSON.stringify(room.objects);
-  if (scores.every((s) => s >= PASS) || round > ROUNDS) {
-    history.push({ round, scores, fixes: 0, kept: true });
-    break;
-  }
+  if (!better) results = await ask();
   let applied = 0;
   for (const r of results) for (const f of r.fixes.slice(0, 5)) applied += Number(apply(r.v, f));
-  history.push({ round, scores, fixes: applied, kept: true });
+  history.push({ round, scores, fixes: applied, kept: better });
   console.log(`round ${round}: scores ${scores.join(", ")} · ${applied} fixes applied`);
   if (!applied) break;
 }

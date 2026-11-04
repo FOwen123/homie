@@ -26,6 +26,8 @@ await step("room shell + objects", () => py("room.py", capture, join(work, "seg"
 await step("line furniture up with the walls", () => py("layout.py", bundle));
 await cp(join(work, "kf"), join(bundle, "keyframes"), { recursive: true });
 await step("furniture parts + finishes (Muse)", () => $`bun ${join(import.meta.dir, "parts.ts")} ${bundle}`.quiet());
+await step("fit estimated pieces to their outlines", () => py("fit_boxes.py", bundle, join(work, "seg")));
+await step("line up again after fitting", () => py("layout.py", bundle));
 await step("judge: blocks vs real frames (Muse)", () => $`bun ${join(import.meta.dir, "judge.ts")} ${bundle}`.quiet());
 await step("re-square after the judge's moves", () => py("layout.py", bundle));
 await step("full-resolution photos for the Real view", () => py("photos.py", capture, bundle));

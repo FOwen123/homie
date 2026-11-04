@@ -164,7 +164,26 @@ export const moveIn = (state: RoomState, id: string, pose: Pose): RoomState => s
   ? { ...state, placements: state.placements.map((p) => (p.id === id ? { ...p, ...pose } : p)) }
   : { ...state, moved: { ...state.moved, [id]: pose } };
 
-/** What a moved piece now runs into: "wall", another piece's label, or null. `room` has the moves applied. */
+/** Apply what the user changed while the agent was thinking (`sent` → `cur`) on top of the agent's reply. */
+export function keepLocal(sent: RoomState, cur: RoomState, out: RoomState): RoomState {
+  const ids = (l: { id: string }[]) => new Set(l.map((p) => p.id));
+  const sentIds = ids(sent.placements), curIds = ids(cur.placements);
+  const changed = new Map(cur.placements.filter((p) => !sentIds.has(p.id) || !sent.placements.includes(p)).map((p) => [p.id, p]));
+  // products the user took out while waiting stay out, even if the agent re-placed them under a new id
+  const dropped = new Set(sent.placements.filter((p) => !curIds.has(p.id)).map((p) => p.productId));
+  const placements = out.placements
+    .filter((p) => (sentIds.has(p.id) ? curIds.has(p.id) : curIds.has(p.id) || !dropped.has(p.productId)))
+    .map((p) => changed.get(p.id) ?? p);
+  for (const p of changed.values()) if (!placements.some((x) => x.id === p.id)) placements.push(p);
+  const edits = <T,>(a: Record<string, T> = {}, b: Record<string, T> = {}, o: Record<string, T> = {}) =>
+    ({ ...o, ...Object.fromEntries(Object.entries(b).filter(([k, v]) => a[k] !== v)) });
+  const list = (s: string[], c: string[], o: string[]) => [...new Set([...o.filter((x) => !s.includes(x) || c.includes(x)), ...c.filter((x) => !s.includes(x))])];
+  return { ...out, placements, moved: edits(sent.moved, cur.moved, out.moved), sizeEdits: edits(sent.sizeEdits, cur.sizeEdits, out.sizeEdits),
+    list: list(sent.list, cur.list, out.list), removed: list(sent.removed, cur.removed, out.removed) };
+}
+
+/** What a moved piece now runs into: "wall", "door-zone" (the 60 cm in front of the door), another piece's
+ *  label, or null. `room` has the moves applied. */
 export function collision(room: Room, state: RoomState, products: Map<string, Product>, id: string): string | null {
   const all = [...objectBoxes(room, state), ...placementBoxes(state, products)];
   const me = all.find((b) => b.id === id);
@@ -172,9 +191,9 @@ export function collision(room: Room, state: RoomState, products: Map<string, Pr
   const hw = room.shell.width / 2, hd = room.shell.depth / 2;
   if (Math.min(...corners(me).map(([x, z]) => Math.min(hw - Math.abs(x), hd - Math.abs(z)))) < -0.03) return "wall";
   const flat = (b: Box) => b.y1 - b.y0 <= 0.03; // rugs lie under furniture
-  for (const o of all) {
+  for (const o of [...all, ...doorZones(room)]) {
     if (o.id === id || flat(o) || flat(me) || me.y0 >= o.y1 - 0.02 || o.y0 >= me.y1 - 0.02) continue;
-    if (gap(me, o) < -0.02) return o.label;
+    if (gap(me, o) < -0.02) return o.id === "door-zone" ? o.id : o.label;
   }
   return null;
 }

@@ -185,6 +185,9 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
       if (real && !photos.length) void loadSplat(); // rooms processed before photos.py fall back to the splat
       if (splat) splat.visible = real;
       floor.visible = walls.visible = blocks.visible = !real;
+      // over photos, blocks would slide against the room as you turn (the photo is from a nearby spot, not
+      // this exact camera): the AI photo is the faithful preview there
+      products.visible = !(real && photos.length);
       for (const o of withMoves(room, state).objects) {
         if (state.removed.includes(o.id)) continue;
         const size = state.sizeEdits[o.id] ?? o.size;
@@ -292,11 +295,17 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
         if (s > score) { score = s; best = i; }
       });
       const [a, b] = [imgs.current[front]!, imgs.current[1 - front]!];
-      if (best !== shownPhoto && b.dataset.i !== String(best)) {
+      const want = String(best);
+      const swap = () => { b.style.opacity = "1"; a.style.opacity = "0"; front = 1 - front; };
+      if (best !== shownPhoto) {
         shownPhoto = best;
-        b.dataset.i = String(best);
-        b.onload = () => { if (b.dataset.i !== String(shownPhoto)) return; b.style.opacity = "1"; a.style.opacity = "0"; front = 1 - front; };
-        b.src = `${roomUrl}/${photos[best].file}`;
+        if (a.dataset.i === want) { /* already on screen: a pending load into b will not swap */ }
+        else if (b.dataset.i === want && b.complete && b.naturalWidth) swap(); // turned back to the photo just left
+        else {
+          b.dataset.i = want;
+          b.onload = () => { if (b.dataset.i === String(shownPhoto)) swap(); };
+          b.src = `${roomUrl}/${photos[best].file}`;
+        }
       }
       place(a);
       place(b);
@@ -357,14 +366,15 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
     rebuild();
 
     const ray = new THREE.Raycaster();
-    let down: { x: number; y: number } | null = null;
-    const pointerDown = (e: PointerEvent) => (down = { x: e.clientX, y: e.clientY });
+    let down: { x: number; y: number } | null = null, onGizmo = false;
+    // the gizmo's own pointerdown runs first (registered earlier) and sets axis; by pointerup it is cleared
+    const pointerDown = (e: PointerEvent) => { down = { x: e.clientX, y: e.clientY }; onGizmo = !!gizmo.axis; };
     const pointerUp = (e: PointerEvent) => {
       if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return; // a drag, not a tap
-      if (gizmo.dragging || gizmo.axis) return; // a click on the move arrows, not on the room
+      if (onGizmo) return; // a tap on the move arrows, not on the room
       const rect = renderer.domElement.getBoundingClientRect();
       ray.setFromCamera(new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1), camera);
-      const hit = ray.intersectObjects([...blocks.children, ...products.children], true)[0];
+      const hit = ray.intersectObjects([blocks, products].filter((g) => g.visible).flatMap((g) => g.children), true)[0]; // raycasts ignore .visible
       let o: THREE.Object3D | null = hit?.object ?? null;
       while (o && !o.userData.id) o = o.parent;
       live.current.onSelect(o?.userData.id ?? null);
@@ -404,7 +414,7 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
       }
       const { selected, onLabel } = live.current;
       if (onLabel) {
-        const g = [...blocks.children, ...products.children].find((c) => c.userData.id === selected);
+        const g = [blocks, products].filter((x) => x.visible).flatMap((x) => x.children).find((c) => c.userData.id === selected);
         if (g) {
           const box = new THREE.Box3().setFromObject(g);
           v.set((box.min.x + box.max.x) / 2, box.max.y, (box.min.z + box.max.z) / 2).project(camera);
@@ -477,7 +487,7 @@ export function RoomViewer({ room, roomUrl, state, products, mode, selected, onS
             ))}
           </div>
           <span role="status" className={`rounded-full px-2.5 py-1 text-[12px] ${hit ? "bg-peach-wash text-fit-no" : "bg-mint-wash text-fit-yes"}`}>
-            {hit ? `✕ ${t("hits")} ${hit === "wall" ? t("theWall") : lang === "zh" ? LABEL_ZH[hit] ?? hit : hit}` : `✓ ${t("fitsHere")}`}
+            {!hit ? `✓ ${t("fitsHere")}` : hit === "door-zone" ? `✕ ${t("blocksDoor")}` : `✕ ${t("hits")} ${hit === "wall" ? t("theWall") : lang === "zh" ? LABEL_ZH[hit] ?? hit : hit}`}
           </span>
         </div>
       )}
