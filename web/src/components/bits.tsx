@@ -53,3 +53,23 @@ export function ProductCard({ product, fit, inList, onShow, onAdd }: { product: 
     </article>
   );
 }
+
+/** One look for every either/or control (view modes, panel tabs): charcoal pill marks the current one. */
+export function Segmented<K extends string>({ items, value, onChange, label, className = "" }: {
+  items: { key: K; label: string; badge?: number }[]; value: K; onChange: (k: K) => void; label: string; className?: string;
+}) {
+  return (
+    <div role="group" aria-label={label} className={`flex gap-1 rounded-full bg-paper-white p-1 ${className}`}>
+      {items.map(({ key, label, badge }) => {
+        const on = key === value;
+        return (
+          <button key={key} onClick={() => onChange(key)} aria-pressed={on}
+            className={`inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-4 text-[14px] transition-colors ${on ? "bg-charcoal text-paper-white" : "text-graphite"}`}>
+            {label}
+            {badge !== undefined && <span className={`num rounded-full px-1.5 text-[12px] ${on ? "bg-paper-white/15" : "bg-mist-gray"}`}>{badge}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}

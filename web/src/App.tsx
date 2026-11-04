@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Chat, ShopAll, ShoppingList, freshPhotos, photoKey } from "./components/Chat";
 import { RoomViewer, type ViewMode } from "./components/RoomViewer";
-import { MeasureChip, dims } from "./components/bits";
+import { MeasureChip, Segmented, dims } from "./components/bits";
 import { findSpot, productMap, replaceSpot } from "./lib/fit";
 import { LangContext, type Lang, useT } from "./lib/i18n";
 import type { ChatTurn, Product, Room, RoomState } from "./lib/types";
@@ -38,14 +38,22 @@ function LangToggle() {
   );
 }
 
+/** The same top bar on every page: logo home, optional room facts, language. */
+function Header({ children }: { children?: React.ReactNode }) {
+  return (
+    <header className="flex items-center gap-3">
+      <a href="/" className="shrink-0"><img src="/roomie-logo.png" alt="Roomie" className="h-7 w-auto" /></a>
+      <div className="min-w-0 flex-1">{children}</div>
+      <LangToggle />
+    </header>
+  );
+}
+
 function Landing() {
   const t = useT();
   return (
     <main className="mx-auto flex min-h-full max-w-[1200px] flex-col px-4 py-6 md:px-10">
-      <header className="flex items-center justify-between">
-        <img src="/roomie-logo.png" alt="Roomie" className="h-7 w-auto" />
-        <LangToggle />
-      </header>
+      <Header />
       <section className="my-auto py-12">
         <h1 className="max-w-3xl text-[48px] leading-[1.05] md:text-[96px]">{t("tagline")}</h1>
         <p className="mt-5 max-w-xl text-[18px] text-graphite">{t("sub")}</p>
@@ -69,7 +77,6 @@ function RoomPage({ id }: { id: string }) {
   const [mode, setMode] = useState<ViewMode>("blocks");
   const [selected, setSelected] = useState<string | null>(null);
   const [label, setLabel] = useState<{ x: number; y: number } | null>(null);
-  const [resetKey, setResetKey] = useState(0);
   const [tab, setTab] = useState<"chat" | "shop" | "list">("chat");
   const [editing, setEditing] = useState(false);
   const products = useMemo(() => productMap(catalog), [catalog]);
@@ -103,57 +110,52 @@ function RoomPage({ id }: { id: string }) {
   const area = room.shell.width * room.shell.depth;
 
   return (
-    <div className="flex h-full flex-col md:flex-row">
-      <section className="relative h-[46svh] shrink-0 p-3 md:h-full md:flex-1 md:p-6">
-        <div className="iris-frame h-full">
-          <div className="relative h-full overflow-hidden rounded-[24px] bg-sky-tint">
-            <RoomViewer room={room} roomUrl={url} state={state} products={products} mode={mode} selected={selected}
-              onSelect={(sel) => { setSelected(sel); if (room.objects.some((o) => o.id === sel)) setTab("shop"); }} onLabel={setLabel} resetKey={resetKey} />
-            <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-3">
-              <div className="pointer-events-auto rounded-full bg-paper-white/90 px-3 py-1.5 text-[13px]">
-                <a href="/" className="inline-flex items-center align-[-3px]"><img src="/roomie-logo.png" alt="Roomie" className="h-4 w-auto" /></a> · <span className="num">{(area / 3.3058).toFixed(1)} 坪 · {dims({ w: room.shell.width, d: room.shell.depth, h: room.shell.height })}</span>
-              </div>
-              {room.judge && (
-                <div className="pointer-events-auto absolute top-14 left-3 rounded-full bg-paper-white/90 px-3 py-1 text-[12px] text-graphite"
+    <div className="flex h-full flex-col gap-3 px-3 pt-3 md:gap-6 md:px-6 md:pt-5">
+      <Header>
+        <span className="num inline-block max-w-full truncate rounded-full bg-bone-white px-3 py-1.5 text-[13px] text-graphite">
+          {(area / 3.3058).toFixed(1)} 坪<span className="hidden sm:inline"> · {dims({ w: room.shell.width, d: room.shell.depth, h: room.shell.height })}</span>
+        </span>
+      </Header>
+      <div className="flex min-h-0 flex-1 flex-col gap-3 md:flex-row md:gap-6 md:pb-6">
+        <section className="relative h-[46svh] shrink-0 md:h-full md:flex-1">
+          <div className="iris-frame h-full">
+            <div className="relative h-full overflow-hidden rounded-[24px] bg-sky-tint">
+              <RoomViewer room={room} roomUrl={url} state={state} products={products} mode={mode} selected={selected}
+                onSelect={(sel) => { setSelected(sel); if (room.objects.some((o) => o.id === sel)) setTab("shop"); }} onLabel={setLabel} />
+              <div className="pointer-events-none absolute top-3 left-3 flex flex-col items-start gap-1.5">
+              {room.judge && mode === "blocks" && (
+                <div className="pointer-events-auto rounded-full bg-paper-white/90 px-3 py-1 text-[12px] text-graphite"
                   title={room.judge.rounds.map((r) => `round ${r.round}: ${r.scores.join(", ")}${r.kept ? "" : " (reverted)"}`).join("\n")}>
                   {t("aiChecked")} <span className="num text-ink">{(room.judge.final.reduce((a, b) => a + b, 0) / room.judge.final.length).toFixed(1)}/10</span> · {room.judge.rounds.length} {t("rounds")}
                 </div>
               )}
-              <div className="pointer-events-auto"><LangToggle /></div>
-            </div>
-            {label && (obj || placed) && (
-              <div className="pointer-events-auto absolute -translate-x-1/2 -translate-y-full" style={{ left: label.x, top: label.y - 6 }}>
-                {obj ? <MeasureChip obj={obj} size={state.sizeEdits[obj.id] ?? obj.size} edited={!!state.sizeEdits[obj.id]} onClick={() => setEditing(true)} />
-                  : placed && <span className="rounded-full bg-paper-white px-3 py-1.5 text-[13px] shadow-float">{products.get(placed.productId)?.title_en}</span>}
+                <p className="hidden rounded-full bg-paper-white/90 px-3 py-1 text-[12px] text-graphite md:block">{t(mode === "real" ? "dragHintReal" : "dragHint")}</p>
               </div>
-            )}
-            <div className="absolute inset-x-0 bottom-3 flex justify-center">
-              <div className="flex gap-1 rounded-full bg-paper-white p-1 shadow-float">
-                {(["blocks", "real"] as const).map((m) => (
-                  <button key={m} onClick={() => setMode(m)} className={`min-h-10 rounded-full px-4 text-[14px] ${mode === m ? "bg-charcoal text-paper-white" : "text-graphite"}`}>{t(m)}</button>
-                ))}
-                <button onClick={() => setResetKey((k) => k + 1)} className="min-h-10 rounded-full px-4 text-[14px] text-graphite">{t("reset")}</button>
+              {label && (obj || placed) && (
+                <div className="pointer-events-auto absolute -translate-x-1/2 -translate-y-full" style={{ left: label.x, top: label.y - 6 }}>
+                  {obj ? <MeasureChip obj={obj} size={state.sizeEdits[obj.id] ?? obj.size} edited={!!state.sizeEdits[obj.id]} onClick={() => setEditing(true)} />
+                    : placed && <span className="rounded-full bg-paper-white px-3 py-1.5 text-[13px] shadow-float">{products.get(placed.productId)?.title_en}</span>}
+                </div>
+              )}
+              <div className="absolute inset-x-0 bottom-3 flex justify-center">
+                <Segmented label={t("viewMode")} value={mode} onChange={setMode} className="shadow-float"
+                  items={(["blocks", "walk", "real"] as const).map((k) => ({ key: k, label: t(k) }))} />
               </div>
             </div>
           </div>
-        </div>
-        {editing && obj && <SizeSheet key={obj.id} obj={obj} state={state} setState={setState} close={() => setEditing(false)} />}
-      </section>
-      <aside className="flex min-h-0 flex-1 flex-col md:w-[440px] md:flex-none md:py-6 md:pr-6">
-        <div className="flex gap-1 px-4 pt-1 md:px-1">
-          {(["chat", "shop", "list"] as const).map((k) => (
-            <button key={k} onClick={() => setTab(k)} className={`min-h-10 rounded-full px-4 text-[14px] ${tab === k ? "bg-bone-white text-ink" : "text-graphite"}`}>
-              {k === "chat" ? "Roomie" : k === "shop" ? `${t("shop")} (${catalog.length})` : `${t("list")} (${state.list.length})`}
-            </button>
-          ))}
-        </div>
-        <div className="min-h-0 flex-1">
-          {tab === "chat"
-            ? <Chat roomId={id} room={room} state={state} setState={setState} products={products} turns={turns} setTurns={setTurns} onFocus={setSelected} selected={obj?.id} />
-            : tab === "shop" ? <ShopAll room={room} state={state} setState={setState} products={products} onFocus={setSelected} swap={obj} onClear={() => setSelected(null)} />
-            : <div className="p-4"><ShoppingList state={state} setState={setState} products={products} t={t} /></div>}
-        </div>
-      </aside>
+          {editing && obj && <SizeSheet key={obj.id} obj={obj} state={state} setState={setState} close={() => setEditing(false)} />}
+        </section>
+        <aside className="flex min-h-0 flex-1 flex-col md:w-[440px] md:flex-none">
+          <Segmented label={t("roomSections")} value={tab} onChange={setTab}
+            items={[{ key: "chat", label: t("chatTab") }, { key: "shop", label: t("shop"), badge: catalog.length }, { key: "list", label: t("listTab"), badge: state.list.length }]} />
+          <div className="-mx-3 min-h-0 flex-1 md:mx-0">
+            {tab === "chat"
+              ? <Chat roomId={id} room={room} state={state} setState={setState} products={products} turns={turns} setTurns={setTurns} onFocus={setSelected} selected={obj?.id} />
+              : tab === "shop" ? <ShopAll room={room} state={state} setState={setState} products={products} onFocus={setSelected} swap={obj} onClear={() => setSelected(null)} />
+              : <div className="p-4"><ShoppingList state={state} setState={setState} products={products} t={t} /></div>}
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }

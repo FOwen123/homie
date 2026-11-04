@@ -132,7 +132,10 @@ Partly seen sizes never block the user and never trigger a question. They use th
 - Room point cloud or mesh in its real colors, lightly desaturated. Object boxes as 1.5px Graphite outlines; selected object gets an Iris outline and a Powder Blue fill at 30%.
 - Dimension lines: 1.5px Iris with end ticks and a white pill label holding the measurement chip. This is the "single bold pen stroke".
 - Proposed products appear at true size with an Iris outline until accepted.
-- Floating pill toolbar at the bottom: Reset view, Measure, Photo view. One finger rotates, two fingers pan and zoom.
+- Three views in a floating segmented control at the bottom: **Overview** (俯視, dollhouse from above), **Walk in** (走進去, first person at 1.55 m eye height, starting just inside the door) and **Real** (真實, the scanned room from where the phone stood).
+- A slim move strip on the right edge, the same in every view: forward/back (zoom in/out in Overview; disabled in Real), turn left/right, reset. Press and hold to keep moving; each button has a label for screen readers.
+- Keyboard: the view takes focus (Tab) and shows the iris focus ring. Arrow keys or WASD move and turn. A hint chip top-left says so on laptops.
+- Drag to look or orbit, two fingers pan and zoom in Overview.
 
 ### 5.9 Realistic photo preview
 A frame from the user's video with the edited furniture, 24px radius, full width. A caption pill always sits in the top-left corner: "AI 生成預覽 AI-generated preview" on Paper White at 90%. A before/after slider uses a white 2px handle.
