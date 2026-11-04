@@ -13,7 +13,7 @@ const MAX_OUT = 800; // output tokens per model call
 const tools = [
   fn("search_products", "Search the cached Shopee Taiwan catalog. Returns up to 8 products with price, size and category.", {
     query: { type: "string", description: "Keywords in Traditional Chinese or English, e.g. 收納櫃 白色, lamp" },
-    category: { type: "string", enum: ["cabinet", "shelf", "drawer unit", "storage box", "lamp", "floor lamp", "rug", "any"] },
+    category: { type: "string", enum: ["cabinet", "wardrobe", "shelf", "drawer unit", "storage box", "nightstand", "desk", "chair", "bed frame", "bin", "lamp", "floor lamp", "rug", "any"] },
     max_price: { type: "number", description: "NT$" }, max_width_cm: { type: "number" }, max_depth_cm: { type: "number" }, max_height_cm: { type: "number" },
   }, ["query"]),
   fn("show_products", "Show 1-3 products to the user as cards with a fit check. Always do this after choosing candidates.", {
@@ -120,9 +120,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         .filter((p) => (!a.category || a.category === "any" || p.category === a.category || (a.category === "lamp" && p.category === "floor lamp")))
         .filter((p) => (!a.max_price || p.price <= a.max_price))
         .filter((p) => !p.size || ((!a.max_width_cm || p.size.w * 100 <= a.max_width_cm) && (!a.max_depth_cm || p.size.d * 100 <= a.max_depth_cm) && (!a.max_height_cm || p.size.h * 100 <= a.max_height_cm)))
-        .map((p) => ({ p, score: q.filter((w) => (p.title + " " + (p.title_en ?? "") + " " + p.category).toLowerCase().includes(w)).length + Math.log10((p.sold ?? 1) + 1) / 4 }))
+        .map((p) => ({ p, score: q.filter((w) => (p.title + " " + (p.title_en ?? "") + " " + p.category).toLowerCase().includes(w)).length + (16 - (p.rank ?? 15)) / 40 })) // best sellers break ties
         .sort((x, y) => y.score - x.score).slice(0, 8)
-        .map(({ p }) => ({ id: p.id, name: p.title_en, price: p.price, size_cm: p.size && `${cm(p.size.w)}×${cm(p.size.d)}×${cm(p.size.h)}`, size_source: p.size_source, category: p.category, color: p.color, sold: p.sold }));
+        .map(({ p }) => ({ id: p.id, name: p.title_en, price: p.price, size_cm: p.size && `${cm(p.size.w)}×${cm(p.size.d)}×${cm(p.size.h)}`, size_source: p.size_source, category: p.category, color: p.color, rating: p.rating, best_seller_rank: p.rank }));
     },
     show_products: (a) => {
       const replaced = objectById(a.replace_object_id);

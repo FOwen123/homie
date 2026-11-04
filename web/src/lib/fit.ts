@@ -138,8 +138,9 @@ export function findSpot(room: Room, state: RoomState, products: Map<string, Pro
 
 /** Catalog categories that can stand in for an existing object (missing: nothing like it in the catalog yet). */
 export const SWAP: Record<string, string[]> = {
-  wardrobe: ["cabinet"], cabinet: ["cabinet", "drawer unit"], shelf: ["shelf", "cabinet"], "storage box": ["storage box", "drawer unit"],
-  "drawer unit": ["drawer unit", "cabinet", "storage box"], lamp: ["lamp", "floor lamp"], rug: ["rug"],
+  wardrobe: ["wardrobe", "cabinet"], cabinet: ["cabinet", "drawer unit", "nightstand"], shelf: ["shelf", "cabinet"],
+  "storage box": ["storage box", "drawer unit"], "drawer unit": ["drawer unit", "cabinet", "storage box"], nightstand: ["nightstand", "drawer unit"],
+  desk: ["desk"], table: ["desk"], chair: ["chair"], bed: ["bed frame"], bin: ["bin"], lamp: ["lamp", "floor lamp"], rug: ["rug"],
 };
 
 /** Stand a product where an existing object stands: same facing, its back where the old back was (so a piece

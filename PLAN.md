@@ -39,7 +39,7 @@ LINE and WhatsApp come last. The engine and the website come first; a chat app o
 | UI | A chat UI inside the website. The chat is a **personal AI shopping agent** that calls tools (room, search, place, move, fit, photo, list) and updates the 3D view live, not a fixed question script. LINE / WhatsApp later. |
 | Buying | Shopee links; the user buys. No agent checkout yet. |
 | Fit | Product sizes come from the listing (parsed by AI, with confidence) and are checked against the room by code. |
-| Products | Shopee Taiwan via Apify scrapers for now, results cached. Budget cap: **at most 3 scraper runs and US$1 total**, each run capped with Apify's `maxTotalChargeUsd`; usage checked via Apify's usage API before each run. Affiliate API or shop partnerships later. |
+| Products | Shopee Taiwan via Apify scrapers for now, results cached. Budget cap: **US$3 total** (raised from 3 runs / US$1 on 2026-11-04); only well-rated, trusted listings enter the catalog; each run capped with Apify's `maxTotalChargeUsd`; usage checked via Apify's usage API before each run. Affiliate API or shop partnerships later. |
 | SAM | Still needed: per-object outlines → per-object sizes, tracking across frames, clickable objects in 3D, clean cut-outs for edits. |
 | Repo | This repo. History restarted for the new direction; old Desk code is backed up in `../desk-backup-before-reset.bundle`. Rename later. |
 
@@ -141,7 +141,7 @@ Each item lists what "done" means. Details get added under each item as we go.
 - [ ] 3.4 Shareable room link. **Done:** the link opens on phone and laptop (T5).
 
 ### Phase 4 – Taiwan catalog
-- [ ] 4.1 Apify fetch, max 3 runs and US$1 total, Traditional Chinese queries covering the main furniture categories; cache results to a local file (T3).
+- [ ] 4.1 Apify fetch, US$3 total, Traditional Chinese queries covering the main furniture categories; cache results to a local file (T3).
 - [ ] 4.2 Muse extracts dimensions, material and color from each listing, with confidence.
 - [ ] 4.3 Search function: slot + taste → ranked products.
 

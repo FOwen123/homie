@@ -23,7 +23,7 @@ A website where a Taiwan renter uploads a walk-around video of their room. The e
 ## Models and paid services
 
 - Meta Model API at `https://api.meta.ai/v1`: `muse-spark-1.3` (labels, style, planning, listing parsing), `sam-3.1` (object outlines, decoded with `@meta-sam/parser`), `muse-image-1.0` (photo edits). The rules require Meta models; prefer them for every AI step.
-- **Apify** (Shopee scraper): at most 3 runs and US$1 in total. Set `maxTotalChargeUsd` on every run and check usage with `GET /v2/users/me/limits` first. Cache results to a file and reuse them.
+- **Apify** (Shopee scraper): US$3 in total (raised from US$1 on 2026-11-04). Only well-rated, trusted listings go into the catalog (thresholds in `pipeline/catalog.ts`). Set `maxTotalChargeUsd` on every run and check usage with `GET /v2/users/me/limits` first. Cache results to a file and reuse them.
 - **Modal** (MapAnything on GPU): not set up yet; the user's card is unavailable until 2026-11-05.
 - Ask the user before adding any other paid service, or spending beyond these caps.
 

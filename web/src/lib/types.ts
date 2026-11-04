@@ -19,7 +19,8 @@ export type Room = {
 };
 
 export type Product = {
-  id: string; title: string; title_en?: string; price: number; url: string; image: string; shop?: string; rating?: number; sold?: number;
+  id: string; title: string; title_en?: string; price: number; url: string; image: string; shop?: string; rating?: number; reviews?: number;
+  rank?: number; // best-seller rank for its search on Shopee (1 = top seller)
   category: string; size?: Size; size_source: "listing" | "estimated"; color?: string; parts?: Part[]; query: string;
 };
 
