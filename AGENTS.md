@@ -11,20 +11,21 @@ A website where a Taiwan renter uploads a walk-around video of their room. The e
 
 - `ios/RoomCapture/`: Swift capture app. Records video plus ARKit camera poses, intrinsics, planes and feature points. Its only job is to hand a capture to the website.
 - `eval/`: accuracy tests and research scripts. Outputs go to `eval/out/` (git-ignored).
-- `engine/` and `web/`: planned (see `PLAN.md` §6).
+- `pipeline/`: capture → room bundle (`process.ts` runs every step; `server.ts` takes uploads from the site through a Cloudflare tunnel and publishes rooms).
+- `web/`: the website (Vite + React + three.js) and its API (Cloudflare Pages Functions in `web/functions/`).
 
 ## Stack
 
 - **Bun + TypeScript** for all JavaScript work: the engine, the website and scripts. Use `bun install`, `bun add`, `bun run` and `bunx`; each package keeps a `bun.lock`.
 - **Python** only for numerical scripts in `eval/`, run through uv with dependencies inline (`uv run --with numpy python eval/…`), so nothing is installed globally.
 - **iOS:** the Xcode project is generated. Edit `ios/project.yml`, run `xcodegen generate` in `ios/`, build with `xcodebuild`, install with `xcrun devicectl` on the test phone "Hao" (base iPhone 17, **no LiDAR**).
-- **Hosting:** the engine runs as a Bun server; the host is still open. Cloudflare Workers were removed from the project.
+- **Hosting:** Cloudflare Pages (static site + Pages Functions); room processing runs on the Mac (`pipeline/server.ts`). Cloudflare Workers were removed from the project.
 
 ## Models and paid services
 
 - Meta Model API at `https://api.meta.ai/v1`: `muse-spark-1.3` (labels, style, planning, listing parsing), `sam-3.1` (object outlines, decoded with `@meta-sam/parser`), `muse-image-1.0` (photo edits). The rules require Meta models; prefer them for every AI step.
 - **Apify** (Shopee scraper): US$3 in total (raised from US$1 on 2026-11-04). Only well-rated, trusted listings go into the catalog (thresholds in `pipeline/catalog.ts`). Set `maxTotalChargeUsd` on every run and check usage with `GET /v2/users/me/limits` first. Cache results to a file and reuse them.
-- **Modal** (MapAnything on GPU): not set up yet; the user's card is unavailable until 2026-11-05.
+- **Modal** (MapAnything on GPU): set up (tokens in `.env`), about US$0.05 a run; an experiment only (`eval/mapanything_*.py`), not in the pipeline.
 - Ask the user before adding any other paid service, or spending beyond these caps.
 
 ## Secrets

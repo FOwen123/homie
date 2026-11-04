@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Chat, ShopAll, ShoppingList, freshPhotos, photoKey } from "./components/Chat";
 import { RoomViewer, type ViewMode } from "./components/RoomViewer";
 import { MeasureChip, Segmented, dims } from "./components/bits";
-import { findSpot, productMap, replaceSpot } from "./lib/fit";
+import { findSpot, moveIn, productMap, replaceSpot, withMoves } from "./lib/fit";
 import { LangContext, type Lang, useT } from "./lib/i18n";
 import type { ChatTurn, Product, Room, RoomState } from "./lib/types";
 
@@ -59,7 +59,7 @@ function Landing() {
         <p className="mt-5 max-w-xl text-[18px] text-graphite">{t("sub")}</p>
         <div className="mt-8 flex flex-wrap gap-3">
           <a href="/room/demo" className="inline-flex min-h-12 items-center rounded-full bg-charcoal px-6 text-[16px] text-paper-white shadow-button">{t("openDemo")}</a>
-          <a href="https://testflight.apple.com/" className="inline-flex min-h-12 items-center rounded-full border border-ink/12 bg-bone-white px-6 text-[16px]">{t("scanOwn")}</a>
+          <a href="https://github.com/FOwen123/desk#scan-your-own-room" className="inline-flex min-h-12 items-center rounded-full border border-ink/12 bg-bone-white px-6 text-[16px]">{t("scanOwn")}</a>
         </div>
         <p className="mt-6 max-w-xl text-[13px] text-fog">Muse Spark · SAM 3.1 · Muse Image · ARKit · Gaussian splat. Built for the Meta Global AI Developer Hackathon.</p>
       </section>
@@ -89,10 +89,11 @@ function RoomPage({ id }: { id: string }) {
   useEffect(() => { // "Show me" on a not-yet-placed product: place it, then ask for a photo
     const h = (e: Event) => {
       if (!room) return;
+      const here = withMoves(room, state);
       const { productId: pid, replace } = (e as CustomEvent).detail as { productId: string; replace?: string };
-      const old = room.objects.find((o) => o.id === replace && !state.removed.includes(o.id));
-      const desk = products.get(pid)?.category === "lamp" ? room.objects.find((o) => o.label === "desk" && !state.removed.includes(o.id)) : undefined;
-      const spot = old ? replaceSpot(state, products, old, pid) : findSpot(room, state, products, pid, desk);
+      const old = here.objects.find((o) => o.id === replace && !state.removed.includes(o.id));
+      const desk = products.get(pid)?.category === "lamp" ? here.objects.find((o) => o.label === "desk" && !state.removed.includes(o.id)) : undefined;
+      const spot = old ? replaceSpot(state, products, old, pid) : findSpot(here, state, products, pid, desk);
       if (!spot) return;
       setState({ ...state, removed: old ? [...state.removed, old.id] : state.removed, placements: [...state.placements, spot] });
       setSelected(spot.id);
@@ -105,7 +106,8 @@ function RoomPage({ id }: { id: string }) {
   }, [room, state, products, turns]);
 
   if (!room) return <div className="grid h-full place-items-center text-fog"><span className="pulse-dot h-3 w-3 rounded-full bg-powder-blue" /></div>;
-  const obj = room.objects.find((o) => o.id === selected);
+  const shown = withMoves(room, state); // the room as the user rearranged it
+  const obj = shown.objects.find((o) => o.id === selected);
   const placed = state.placements.find((p) => p.id === selected);
   const area = room.shell.width * room.shell.depth;
 
@@ -121,7 +123,8 @@ function RoomPage({ id }: { id: string }) {
           <div className="iris-frame h-full">
             <div className="relative h-full overflow-hidden rounded-[24px] bg-sky-tint">
               <RoomViewer room={room} roomUrl={url} state={state} products={products} mode={mode} selected={selected}
-                onSelect={(sel) => { setSelected(sel); if (room.objects.some((o) => o.id === sel)) setTab("shop"); }} onLabel={setLabel} />
+                onSelect={(sel) => { setSelected(sel); if (room.objects.some((o) => o.id === sel)) setTab("shop"); }} onLabel={setLabel}
+                onMove={(id, pose) => setState(moveIn(state, id, pose))} />
               <div className="pointer-events-none absolute top-3 left-3 flex flex-col items-start gap-1.5">
               {room.judge && mode === "blocks" && (
                 <div className="pointer-events-auto rounded-full bg-paper-white/90 px-3 py-1 text-[12px] text-graphite"
@@ -150,8 +153,8 @@ function RoomPage({ id }: { id: string }) {
             items={[{ key: "chat", label: t("chatTab") }, { key: "shop", label: t("shop"), badge: catalog.length }, { key: "list", label: t("listTab"), badge: state.list.length }]} />
           <div className="-mx-3 min-h-0 flex-1 md:mx-0">
             {tab === "chat"
-              ? <Chat roomId={id} room={room} state={state} setState={setState} products={products} turns={turns} setTurns={setTurns} onFocus={setSelected} selected={obj?.id} />
-              : tab === "shop" ? <ShopAll room={room} state={state} setState={setState} products={products} onFocus={setSelected} swap={obj} onClear={() => setSelected(null)} />
+              ? <Chat roomId={id} room={shown} state={state} setState={setState} products={products} turns={turns} setTurns={setTurns} onFocus={setSelected} selected={obj?.id} />
+              : tab === "shop" ? <ShopAll room={shown} state={state} setState={setState} products={products} onFocus={setSelected} swap={obj} onClear={() => setSelected(null)} />
               : <div className="p-4"><ShoppingList state={state} setState={setState} products={products} t={t} /></div>}
           </div>
         </aside>

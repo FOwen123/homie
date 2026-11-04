@@ -22,6 +22,7 @@ KF_STEP, SW, SH, SENSOR_H = 50, 960, 1280, 1440
 S = SENSOR_H / SW
 SKIP = {"floor", "wall", "ceiling", "ceiling beam", "beam", "light switch", "power outlet", "access panel",
         "utility panel", "electrical panel", "floor mat", "doorway"}
+FIXTURE_WORDS = ("outlet", "socket", "switch", "panel", "vent", "thermostat")  # Muse labels freely: "wall outlet"
 OPENINGS = {"door", "window"}
 AS_WINDOW = {"curtain"}  # a curtain marks a window opening, not furniture
 # Minimum depth by label: ARKit often sees only the front face of tall furniture.
@@ -92,7 +93,7 @@ for meta_path in sorted(seg.glob("k*.json")):
     fi = (int(name[1:]) - 1) * KF_STEP
     P = feats.get(fi)
     for o in meta["objects"]:
-        if not o["mask"] or o["label"] in SKIP:
+        if not o["mask"] or o["label"] in SKIP or any(w in o["label"] for w in FIXTURE_WORDS):
             continue
         r, b = load_mask(name, o)
         area = int((r > 0).sum() * ((b["right"] - b["left"]) * (b["bottom"] - b["top"])) / r.size)

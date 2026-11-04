@@ -14,6 +14,7 @@ export type Keyframe = { file: string; cam_to_room: number[][]; fx: number; fy: 
 export type Room = {
   version: 1; shell: { width: number; depth: number; height: number; walls: Wall[] };
   objects: RoomObject[]; keyframes: Keyframe[]; world_to_room: number[][];
+  photos?: Keyframe[]; // full-resolution video frames for the Real view (pipeline/photos.py)
   finishes?: { wall: string; floor: string; ceiling: string; floor_material: string; style: string };
   judge?: { model: string; views: number[]; rounds: { round: number; scores: number[]; fixes: number; kept: boolean }[]; final: number[] };
 };
@@ -23,6 +24,8 @@ export type Product = {
   rank?: number; // best-seller rank for its search on Shopee (1 = top seller)
   category: string; size?: Size; size_source: "listing" | "estimated"; color?: string; parts?: Part[]; query: string;
 };
+
+export type Pose = { x: number; z: number; yaw: number };
 
 /** A product the agent placed in the room. */
 export type Placement = { id: string; productId: string; x: number; z: number; y?: number; yaw: number; accepted?: boolean };
@@ -34,6 +37,7 @@ export type RoomState = {
   placements: Placement[];
   removed: string[];                 // ids of existing objects the user wants gone or replaced
   sizeEdits: Record<string, Size>;   // user corrections ("my desk is 100 cm")
+  moved?: Record<string, Pose>;      // existing furniture the user dragged somewhere else
   taste: { style?: string; budget?: number; notes?: string };
   list: string[];                    // product ids in the shopping list
 };

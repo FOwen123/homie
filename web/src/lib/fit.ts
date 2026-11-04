@@ -1,6 +1,6 @@
 // Deterministic fit checks and placement search (the model proposes, code enforces).
 // Shared by the browser and the API functions.
-import type { FitResult, Placement, Product, Room, RoomObject, RoomState, Size } from "./types";
+import type { FitResult, Placement, Pose, Product, Room, RoomObject, RoomState, Size } from "./types";
 
 type Box = { x: number; z: number; w: number; d: number; yaw: number; y0: number; y1: number; id: string; label: string };
 const ON_TOP = new Set(["lamp", "desk lamp", "plant", "decor", "monitor", "speaker"]); // may sit on furniture
@@ -154,4 +154,39 @@ export function replaceSpot(state: RoomState, products: Map<string, Product>, ob
     x: obj.center[0] + Math.sin(obj.yaw) * k, z: obj.center[2] + Math.cos(obj.yaw) * k, ...(y > 0.03 ? { y } : {}) };
 }
 
-export const productMap =(list: Product[]) => new Map(list.map((p) => [p.id, p]));
+/** The room with the user's moves applied to its existing furniture. */
+export const withMoves = (room: Room, state: RoomState): Room => !state.moved ? room : {
+  ...room, objects: room.objects.map((o) => { const m = state.moved![o.id]; return m ? { ...o, center: [m.x, o.center[1], m.z], yaw: m.yaw } : o; }),
+};
+
+/** Put a placed product or an existing object at a new pose. */
+export const moveIn = (state: RoomState, id: string, pose: Pose): RoomState => state.placements.some((p) => p.id === id)
+  ? { ...state, placements: state.placements.map((p) => (p.id === id ? { ...p, ...pose } : p)) }
+  : { ...state, moved: { ...state.moved, [id]: pose } };
+
+/** What a moved piece now runs into: "wall", another piece's label, or null. `room` has the moves applied. */
+export function collision(room: Room, state: RoomState, products: Map<string, Product>, id: string): string | null {
+  const all = [...objectBoxes(room, state), ...placementBoxes(state, products)];
+  const me = all.find((b) => b.id === id);
+  if (!me) return null;
+  const hw = room.shell.width / 2, hd = room.shell.depth / 2;
+  if (Math.min(...corners(me).map(([x, z]) => Math.min(hw - Math.abs(x), hd - Math.abs(z)))) < -0.03) return "wall";
+  const flat = (b: Box) => b.y1 - b.y0 <= 0.03; // rugs lie under furniture
+  for (const o of all) {
+    if (o.id === id || flat(o) || flat(me) || me.y0 >= o.y1 - 0.02 || o.y0 >= me.y1 - 0.02) continue;
+    if (gap(me, o) < -0.02) return o.label;
+  }
+  return null;
+}
+
+/** A piece dropped within 8 cm of a wall clicks flat against it (when square to the walls). */
+export function magnet(room: Room, pose: Pose, size: Size): Pose {
+  const q = Math.round(pose.yaw / (Math.PI / 2));
+  if (Math.abs(pose.yaw - q * (Math.PI / 2)) > 0.01) return pose;
+  const [hx, hz] = q % 2 === 0 ? [size.w / 2, size.d / 2] : [size.d / 2, size.w / 2];
+  const W = room.shell.width / 2 - 0.01, D = room.shell.depth / 2 - 0.01;
+  const stick = (v: number, h: number, lim: number) => (lim - (v + h) < 0.08 ? lim - h : v - h + lim < 0.08 ? h - lim : v);
+  return { ...pose, x: stick(pose.x, hx, W), z: stick(pose.z, hz, D) };
+}
+
+export const productMap = (list: Product[]) => new Map(list.map((p) => [p.id, p]));
