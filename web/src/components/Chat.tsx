@@ -60,8 +60,9 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
         {turns.map((m, i) => (
           <div key={i} className="rise space-y-3">
             {(m.text || m.image) && (
-              <div className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[85%] rounded-[24px] px-4 py-3 text-[17px] leading-[1.45] ${m.role === "user" ? "rounded-br-lg bg-mist-gray" : "rounded-bl-lg bg-bone-white"}`}>
+              <div className={`flex items-start gap-2.5 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                {m.role === "assistant" && <Avatar />}
+                <div className={`max-w-[85%] rounded-[22px] px-4 py-3 text-[17px] leading-[1.45] ${m.role === "user" ? "rounded-br-md bg-charcoal text-paper-white" : "rounded-tl-md bg-paper"}`}>
                   {m.image && <img src={m.image} alt="" className="mb-2 max-h-48 rounded-2xl" />}
                   {m.text}
                 </div>
@@ -74,13 +75,13 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
         {turns.length <= 1 && !busy && (
           <div className="flex flex-wrap gap-2">
             {(["quickPlan", "quick1", "quick2", "quick3"] as const).map((k) => (
-              <button key={k} onClick={() => send(t(k))} className="min-h-11 rounded-full bg-bone-white px-4 text-[15px]">{t(k)}</button>
+              <button key={k} onClick={() => send(t(k))} className="min-h-11 rounded-full bg-paper px-4 text-[15px]">{t(k)}</button>
             ))}
           </div>
         )}
         <div ref={end} />
       </div>
-      <form onSubmit={(e) => { e.preventDefault(); void send(text); }} className="m-3 flex items-end gap-2 rounded-[28px] bg-paper-white p-2 shadow-float">
+      <form onSubmit={(e) => { e.preventDefault(); void send(text); }} className="m-3 flex items-end gap-2 rounded-[28px] border border-ink/14 bg-paper-white p-1.5 md:m-4">
         <label className="grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-full text-graphite" title="photo">
           <input type="file" accept="image/*" className="hidden" onChange={async (e) => { const f = e.target.files?.[0]; if (f) setImage(await shrink(f)); e.target.value = ""; }} />
           {image ? <img src={image} alt="" className="h-9 w-9 rounded-full object-cover" /> : (
@@ -93,9 +94,20 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={1} placeholder={t("chatPlaceholder")}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(text); } }}
           className="max-h-32 min-h-11 flex-1 resize-none bg-transparent px-1 py-2.5 text-[17px] outline-none placeholder:text-fog" />
-        <button disabled={busy} className="h-11 shrink-0 rounded-full bg-charcoal px-4 text-[15px] text-paper-white shadow-button disabled:opacity-50">{t("send")}</button>
+        <button disabled={busy} aria-label={t("send")} title={t("send")} className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-charcoal text-paper-white disabled:opacity-50">
+          <svg aria-hidden viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+        </button>
       </form>
     </div>
+  );
+}
+
+/** Homie's mark beside its messages: the house from the wordmark on ink. */
+function Avatar() {
+  return (
+    <span aria-hidden className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-charcoal text-paper-white">
+      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M3 10.5 12 3l9 7.5V20H3z" /></svg>
+    </span>
   );
 }
 
@@ -147,7 +159,7 @@ export function PhotoCard({ roomId, placement }: { roomId: string; placement?: P
     return () => { live = false; };
   }, [roomId, id, want]);
   if (!img && !want) return <button onClick={() => setWant(true)} className="min-h-11 rounded-full bg-charcoal px-4 text-[15px] text-paper-white shadow-button">{t("showMe")}</button>;
-  if (!img) return <div className="flex aspect-[3/4] w-full max-w-sm items-center justify-center rounded-[24px] bg-bone-white text-[15px] text-fog"><span className="pulse-dot mr-2 h-2 w-2 rounded-full bg-powder-blue" />{t("making")}</div>;
+  if (!img) return <div className="flex aspect-[3/4] w-full max-w-sm items-center justify-center rounded-[24px] bg-paper text-[15px] text-fog"><span className="pulse-dot mr-2 h-2 w-2 rounded-full bg-powder-blue" />{t("making")}</div>;
   if (!img.image) return <p className="text-[15px] text-fog">{t("photoFailed")} {img.error === "busy" ? t("busy") : img.error?.startsWith("no frame") ? t("noFrame") : ""}</p>;
   return (
     <figure className="relative w-full max-w-sm overflow-hidden rounded-[24px]" onPointerDown={() => setBefore(true)} onPointerUp={() => setBefore(false)} onPointerLeave={() => setBefore(false)}>
@@ -160,9 +172,9 @@ export function PhotoCard({ roomId, placement }: { roomId: string; placement?: P
 export function ShoppingList({ state, setState, products, t }: { state: RoomState; setState: React.Dispatch<React.SetStateAction<RoomState>>; products: Map<string, Product>; t: ReturnType<typeof useT> }) {
   const items = state.list.map((id) => products.get(id)).filter((p): p is Product => !!p);
   const total = items.reduce((s, p) => s + p.price, 0);
-  if (!items.length) return <p className="rounded-[24px] bg-paper-white p-4 text-[15px] text-fog">{t("empty")}</p>;
+  if (!items.length) return <p className="rounded-[24px] bg-paper p-4 text-[15px] text-fog">{t("empty")}</p>;
   return (
-    <div className="rounded-[24px] bg-paper-white p-4">
+    <div className="rounded-[24px] bg-paper p-4">
       <h3 className="mb-2 text-[20px]">{t("list")}</h3>
       {items.map((p) => (
         <div key={p.id} className="flex items-center gap-3 border-b border-ink/6 py-2 last:border-0">
@@ -174,7 +186,7 @@ export function ShoppingList({ state, setState, products, t }: { state: RoomStat
       ))}
       <div className="mt-3 flex items-baseline justify-between">
         <span className="text-[15px] text-graphite">{t("total")}</span>
-        <span className="num font-display text-[24px]">{ntd(total)}</span>
+        <span className="num text-[24px]">{ntd(total)}</span>
       </div>
     </div>
   );
@@ -204,7 +216,7 @@ export function ShopAll({ room, state, setState, products, onFocus, swap, onClea
   return (
     <div className="h-full space-y-5 overflow-y-auto px-4 pt-4 pb-6">
       {swap && (
-        <div className="flex items-center justify-between gap-2 rounded-[24px] bg-paper-white p-4">
+        <div className="flex items-center justify-between gap-2 rounded-[24px] bg-paper p-4">
           <p className="text-[15px]">{t("swapFor")} <b>{name(swap.label)}</b> <span className="num text-fog">≈ {dims(state.sizeEdits[swap.id] ?? swap.size)}</span>
             {!groups.length && <span className="block text-fog">{t("swapNone")}</span>}</p>
           <button onClick={onClear} className="min-h-11 shrink-0 rounded-full border border-ink/12 px-4 text-[14px]">{t("showAll")}</button>

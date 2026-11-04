@@ -2,17 +2,16 @@
 
 /* Design tokens: DESIGN.md §9 */
 @theme {
-  --color-sky-tint: #ebf5ff;
-  --color-bone-white: #fafdff;
+  --color-paper: #f4f1eb;
+  --color-sand: #ece8e0;
   --color-paper-white: #ffffff;
-  --color-mist-gray: #f6f7f8;
-  --color-ink: #0a0d12;
-  --color-charcoal: #181d27;
-  --color-graphite: #535862;
-  --color-fog: #6b7079;
+  --color-mist-gray: #f6f5f2;
+  --color-ink: #14130f;
+  --color-charcoal: #14130f;
+  --color-graphite: #57544c;
+  --color-fog: #6e6a62;
   --color-iris: #0069e0;
   --color-powder-blue: #cce7ff;
-  --color-lavender-wash: #f1e6ff;
   --color-mint-wash: #d3f6e3;
   --color-solar-wash: #fff2be;
   --color-peach-wash: #ffe4d6;
@@ -20,16 +19,17 @@
   --color-fit-check: #8a5300;
   --color-fit-no: #b42318;
 
-  --font-display: 'General Sans', 'PingFang TC', 'Noto Sans TC', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Fraunces', 'Noto Serif TC', ui-serif, serif;
   --font-ui: 'Geist', 'PingFang TC', 'Noto Sans TC', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', 'PingFang TC', 'Noto Sans TC', ui-monospace, monospace;
 
   --radius-card: 32px;
   --radius-card-sm: 24px;
   --radius-image: 24px;
   --radius-input: 16px;
 
-  --shadow-float: 0 14px 20px 4px rgba(4, 69, 144, 0.08);
-  --shadow-button: 0 1px 2px rgba(10, 13, 18, 0.8), 0 0 0 1px #0a0d12;
+  --shadow-float: 0 10px 24px rgba(40, 32, 20, 0.08);
+  --shadow-button: 0 1px 2px rgba(20, 19, 15, 0.6);
 
   --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -37,18 +37,19 @@
 html, body, #root { height: 100%; }
 body {
   margin: 0;
-  background: var(--color-sky-tint);
+  background: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-ui);
   font-weight: 500;
   letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
 }
-h1, h2, h3, .font-display { font-family: var(--font-display); font-weight: 500; letter-spacing: -0.02em; }
+h1, h2, .font-display { font-family: var(--font-display); font-weight: 400; letter-spacing: -0.025em; }
+:lang(zh) :is(h1, h2, .font-display) { font-weight: 600; } /* Noto Serif TC reads thin at 400 */
 :lang(zh), .zh { letter-spacing: 0; }
-.num { font-variant-numeric: tabular-nums; }
+.num { font-family: var(--font-mono); font-weight: 400; font-variant-numeric: tabular-nums; }
 :focus-visible { outline: 2px solid var(--color-iris); outline-offset: 2px; }
-.iris-frame { padding: 3px; background: linear-gradient(rgb(71, 157, 255) 11.43%, rgb(0, 105, 224) 78.2%); border-radius: 27px; }
+.grid-paper { background-color: var(--color-sand); background-image: linear-gradient(rgba(20, 19, 15, 0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(20, 19, 15, 0.045) 1px, transparent 1px); background-size: 32px 32px; }
 
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .rise { animation: rise 0.35s var(--ease-settle) both; }

@@ -1,6 +1,6 @@
 # Homie — Design
 
-> Soft daylight notebook: generous margins, one bold pen stroke. The pen stroke is the blue tape-measure line.
+> Drafting paper, one blue pen: warm paper, ink type, and a single iris-blue pen that only marks what we measured. Mockups: Spark file "Projects", page "Homie".
 
 The look of the room engine in `PLAN.md`: a chat website where your own room, measured, is the hero, and every number shows how sure we are.
 
@@ -19,18 +19,16 @@ The look of the room engine in `PLAN.md`: a chat website where your own room, me
 
 | Name | Value | Token | Role |
 |---|---|---|---|
-| Sky Tint | `#ebf5ff` | `--color-sky-tint` | Page canvas; 3D viewer background |
-| Bone White | `#fafdff` | `--color-bone-white` | Cards, chat bubbles from the engine, panels |
-| Paper White | `#ffffff` | `--color-paper-white` | Modals, sheets, text on dark buttons |
-| Mist Gray | `#f6f7f8` | `--color-mist-gray` | Secondary surfaces, the user's chat bubbles, "unknown" chips |
-| Ink | `#0a0d12` | `--color-ink` | Headings, measured values, primary text |
-| Charcoal | `#181d27` | `--color-charcoal` | Filled buttons (the only dense element) |
-| Graphite | `#535862` | `--color-graphite` | Body text, estimated values |
-| Fog | `#6b7079` | `--color-fog` | Helper text, source labels, "unknown" values. 4.9:1 contrast on cards |
+| Paper | `#f4f1eb` | `--color-paper` | Page canvas; the engine's chat bubbles; quick replies |
+| Sand | `#ece8e0` | `--color-sand` | 3D viewer surface (with a faint 32px grid, `.grid-paper`) and step visuals |
+| Paper White | `#ffffff` | `--color-paper-white` | Cards, the chat panel, sheets, floating controls |
+| Mist Gray | `#f6f5f2` | `--color-mist-gray` | Behind product photos, "unknown" chips |
+| Ink | `#14130f` | `--color-ink` | Headings, measured values, primary text |
+| Charcoal | `#14130f` | `--color-charcoal` | Filled buttons, the user's chat bubbles, Homie's avatar |
+| Graphite | `#57544c` | `--color-graphite` | Body text, estimated values |
+| Fog | `#6e6a62` | `--color-fog` | Helper text, source labels, "unknown" values |
 | Iris Blue | `#0069e0` | `--color-iris` | Dimension lines, measured-value accents, 3D selection, focus rings, underlined links |
-| Iris Gradient | `linear-gradient(rgb(71,157,255) 11.43%, rgb(0,105,224) 78.2%)` | `--gradient-iris` | 3px frame around the room preview only |
-| Powder Blue | `#cce7ff` | `--color-powder-blue` | Selected object highlight, progress track |
-| Lavender Wash | `#f1e6ff` | `--color-lavender-wash` | Taste / style tiles, inspiration photos |
+| Powder Blue | `#cce7ff` | `--color-powder-blue` | Selected object highlight, progress track, pressed buttons |
 | Mint Wash | `#d3f6e3` | `--color-mint-wash` | "Fits" badge background |
 | Solar Wash | `#fff2be` | `--color-solar-wash` | "Check this" badge: tight fit, re-film request |
 | Peach Wash | `#ffe4d6` | `--color-peach-wash` | "Won't fit" badge background |
@@ -49,13 +47,16 @@ Shopee orange is never part of our UI. It appears only inside Shopee's own logo 
 
 | Family | Use | Weights | Notes |
 |---|---|---|---|
-| **General Sans** (free, Fontshare) | Display and headings | 500 only | Tracking −0.02em. |
-| **Geist** (free) | UI, body, numbers | 500, 600 (10–12 px labels only) | Tracking −0.01em. Set `font-variant-numeric: tabular-nums` on all measurements and prices. |
-| **PingFang TC → Noto Sans TC** | All Chinese text | 500 | Fallback in both stacks. **Tracking 0 for Chinese**, since negative tracking crowds the characters. |
+| **Fraunces** (Google Fonts) | Latin display and headings (h1, h2) | 400 | Tracking −0.025em. |
+| **Noto Serif TC** (Google Fonts) | Chinese display and headings | 600 | Fallback in the display stack; 600 because 400 reads thin. Tracking 0. |
+| **Geist** (free) | UI, body | 500, 600 (10–12 px labels only) | Tracking −0.01em. Card titles (h3) use Geist, not the display face. |
+| **Geist Mono** (Google Fonts) | Every size and price (the `.num` class) | 400 | Reads like annotations on a drawing; tabular. |
+| **PingFang TC → Noto Sans TC** | Chinese text in UI and numbers | 500 | Fallback in the UI and mono stacks. **Tracking 0 for Chinese.** |
 
 ```css
---font-display: 'General Sans', 'PingFang TC', 'Noto Sans TC', ui-sans-serif, system-ui, sans-serif;
+--font-display: 'Fraunces', 'Noto Serif TC', ui-serif, serif;
 --font-ui: 'Geist', 'PingFang TC', 'Noto Sans TC', ui-sans-serif, system-ui, sans-serif;
+--font-mono: 'Geist Mono', 'PingFang TC', 'Noto Sans TC', ui-monospace, monospace;
 ```
 
 Type scale (mobile → ≥1024 px). Headings use display; the rest use UI.
@@ -79,16 +80,16 @@ The hero caps at 96px; this is a chat app, not a poster. Chat messages use 17px,
 - **Base unit 8px.** Scale: 4, 8, 12, 16, 24, 32, 40, 48, 64, 80, 120.
 - **Mobile:** 16px page margin, 16–24px card padding, 12px gap. **Desktop:** max-width 1200px, 40px card padding, 24px gap, 80px between sections.
 - **Radius:** cards 32px (24px on mobile), images and 3D viewer 24px, inputs 16px, small cards 16px, buttons, badges and chips 9999px. No sharp corners anywhere.
-- **Depth:** the shift from canvas `#ebf5ff` to card `#fafdff` does the work. No shadow on cards. Two shadows only:
-  - Button ring: `0 1px 2px rgba(10,13,18,.8), 0 0 0 1px #0a0d12`
-  - Floating elements (chat composer, bottom sheet, 3D toolbar): `0 14px 20px 4px rgba(4,69,144,.08)`
+- **Depth:** the shift from Paper canvas to white cards does the work. No shadow on cards; product cards use a 1px ink border at 10%. Two shadows only:
+  - Button: `0 1px 2px rgba(20,19,15,.6)` (save buttons in sheets)
+  - Floating elements (3D controls, size chip, the phone's chat sheet): `0 10px 24px rgba(40,32,20,.08)`
 - **Tap targets:** at least 44×44px.
 
 ## 5. Components
 
 ### 5.1 Buttons
 - **Primary:** Charcoal fill, white text, pill, 12px 24px padding (mobile full width), Geist 16px/500, button ring shadow. One per screen: "上傳影片 Upload video", "Show me", "Open in Shopee".
-- **Secondary:** Bone White fill, Ink text, 1px `#0a0d12` at 12% opacity border, pill.
+- **Secondary:** no fill, Ink text, 1px ink border at 14–16% opacity, pill.
 - **Ghost:** text only, Graphite, for "Skip" or "Measure it myself".
 - Never fill a button with Iris Blue.
 
@@ -112,14 +113,16 @@ Pill, caption size, icon + short reason. Always backed by `FitResult` from code,
 - **Won't fit:** Peach Wash / No-Fit Red, "✕ 樓梯 75 cm 搬不上去"
 
 ### 5.4 Product card
-Bone White, 24px radius, 16px padding. Top: product photo (1:1, 16px radius, on Mist). Then: name (subheading, 2 lines max), price `NT$ 2,490` (heading, Ink, tabular), size chip (listing), fit badge, shop and rating (body-sm, Fog). Actions: "Show me" (primary) and "3D" plus a Shopee link (secondary). Shown in a horizontal snap carousel inside chat, 2–3 cards per slot.
+White, 22px radius, 1px ink border at 10%, 10px padding, 216px wide. Top: product photo (1:1, 14px radius, on Mist) with the fit badge over its top-left corner. Then: name (14px, 2 lines max), price `NT$ 2,490` (Geist Mono 17px), size line (listing, mono 11px). Actions: "Show me" (primary, fills the row) and a round "+" add-to-list button (✓ once added). The Shopee link lives in the shopping list. Shown in a horizontal snap carousel.
 
 ### 5.5 Chat
-- **Engine message:** Bone White bubble, 24px radius (8px on the corner nearest the avatar), body-lg Ink, max width 85%.
-- **User message:** Mist Gray bubble, right-aligned.
-- **Rich messages** (room summary, product carousel, photo preview) break out of the bubble to full width as cards.
-- **Composer:** fixed bottom, Paper White, pill input (16px radius when multi-line), floating shadow, camera button for inspiration photos, send button in Charcoal.
-- **Quick replies:** pill chips in Bone White: "便宜一點 Cheaper", "更多木頭 More wood", "保留我的椅子 Keep my chair".
+- **Panel:** white, 28px radius, 520px wide on desktop. On phones it is a sheet under the 3D view with a 28px top radius.
+- **Tabs:** text tabs (Chat / Products / List) with a 2px ink underline under the current one; counts in mono.
+- **Engine message:** Paper bubble, 22px radius (6px top-left, next to Homie's avatar: the house mark on a 28px ink circle), body-lg Ink, max width 85%.
+- **User message:** Charcoal bubble, white text, right-aligned, 6px bottom-right corner.
+- **Rich messages** (product carousel, photo preview, list) break out of the bubble to full width.
+- **Composer:** pill input with a 1px ink border at 14%, camera button for inspiration photos, round Charcoal send button with an up arrow.
+- **Quick replies** (first visit only): Paper pill chips.
 
 ### 5.6 Processing progress
 Vertical list of the 5 steps from `PLAN.md` §5 (frames → scale → 3D → objects → sizes). Done: Ink text + Iris check. Current: Ink + a soft pulsing Powder Blue dot. Waiting: Fog. A thin Powder Blue track with an Iris fill sits on top. Show the latest keyframe thumbnail beside it so the wait feels like progress.
@@ -128,21 +131,20 @@ Vertical list of the 5 steps from `PLAN.md` §5 (frames → scale → 3D → obj
 Partly seen sizes never block the user and never trigger a question. They use the estimated chip (§5.2) with a wider ± and a caption-size "約 approx." tag, e.g. `○ ≈ 86 × 50 cm ±15 · 約 approx.` Tapping it opens a small sheet with the method ("From ARKit points, 6 frames") and a numeric cm input; a saved value becomes a `user` chip (✎). The chat agent accepts the same correction in words ("my desk is 100 cm").
 
 ### 5.8 3D room viewer
-- Background Sky Tint, 24px radius, inside the iris-gradient 3px frame on the room summary only.
-- Room point cloud or mesh in its real colors, lightly desaturated. Object boxes as 1.5px Graphite outlines; selected object gets an Iris outline and a Powder Blue fill at 30%.
-- Dimension lines: 1.5px Iris with end ticks and a white pill label holding the measurement chip. This is the "single bold pen stroke".
-- Proposed products appear at true size with an Iris outline until accepted.
-- Two views in a floating segmented control at the bottom: **Overview** (俯視, dollhouse from above) and **Walk in** (走進去, first person at 1.55 m eye height, starting just inside the door). Realism comes from Muse Image photos, not a third view.
+- Sand surface with a faint 32px grid (`.grid-paper`), 28px radius (24px on phones). No frame around it.
+- Room mesh in its real colors. Selected object gets an Iris outline; proposed products appear at true size with an Iris outline until accepted.
+- **Dimension lines** (Overview only): 1px Iris lines for the room's width (near floor edge), depth (side floor edge) and height (far corner), with extension lines and end ticks, each labelled by a white pill with an Iris border and the value in mono cm. This is the "single bold pen stroke". A label that would fall under the move buttons hides.
+- Two views in a segmented control (white pill, the current view on a Paper pill): bottom-right on desktop, top-left on phones. **Overview** (俯視, dollhouse from above) and **Walk in** (走進去, first person at 1.55 m eye height, starting just inside the door). Realism comes from Muse Image photos, not a third view.
 - A slim move strip on the right edge, the same in both views: forward/back (zoom in/out in Overview), turn left/right, reset.
-- Undo (復原) sits top-left once anything changed; Ctrl+Z / ⌘Z does the same. Press and hold to keep moving; each button has a label for screen readers.
-- Keyboard: the view takes focus (Tab) and shows the iris focus ring. Arrow keys or WASD move and turn. A hint chip top-left says so on laptops.
+- Undo (復原) sits bottom-left once anything changed, above the keyboard hint; Ctrl+Z / ⌘Z does the same. Press and hold to keep moving; each button has a label for screen readers.
+- Keyboard: the view takes focus (Tab) and shows the iris focus ring. Arrow keys or WASD move and turn.
 - Drag to look or orbit, two fingers pan and zoom in Overview.
 
 ### 5.9 Realistic photo preview
 A frame from the user's video with the edited furniture, 24px radius, full width. A caption pill always sits in the top-left corner: "AI 生成預覽 AI-generated preview" on Paper White at 90%. A before/after slider uses a white 2px handle.
 
 ### 5.10 Taste tiles and inspiration
-Lavender Wash tiles, 24px radius, for style words ("北歐 Nordic", "原木 Natural wood"). Uploaded inspiration photos sit in a 3-column grid of 16px-radius thumbnails. No more than two pastel washes in one view.
+Sand tiles, 24px radius, for style words ("北歐 Nordic", "原木 Natural wood"). Uploaded inspiration photos sit in a 3-column grid of 16px-radius thumbnails. No more than two pastel washes in one view.
 
 ### 5.11 Shopping list
 Paper card. One row per pick: thumbnail, name, NT$ price (right-aligned, tabular), Shopee link. Group rows by shop. A sticky footer shows the total `NT$ 12,860` (heading) and delivery and assembly notes in body-sm Graphite.
@@ -179,19 +181,20 @@ Paper card. One row per pick: thumbnail, name, NT$ price (right-aligned, tabular
 
 ## 9. Tailwind v4 tokens
 
+The live values are in `web/src/index.css` (`@theme`); the tables above match them.
+
 ```css
 @theme {
-  --color-sky-tint: #ebf5ff;
-  --color-bone-white: #fafdff;
+  --color-paper: #f4f1eb;
+  --color-sand: #ece8e0;
   --color-paper-white: #ffffff;
-  --color-mist-gray: #f6f7f8;
-  --color-ink: #0a0d12;
-  --color-charcoal: #181d27;
-  --color-graphite: #535862;
-  --color-fog: #6b7079;
+  --color-mist-gray: #f6f5f2;
+  --color-ink: #14130f;
+  --color-charcoal: #14130f;
+  --color-graphite: #57544c;
+  --color-fog: #6e6a62;
   --color-iris: #0069e0;
   --color-powder-blue: #cce7ff;
-  --color-lavender-wash: #f1e6ff;
   --color-mint-wash: #d3f6e3;
   --color-solar-wash: #fff2be;
   --color-peach-wash: #ffe4d6;
@@ -199,19 +202,20 @@ Paper card. One row per pick: thumbnail, name, NT$ price (right-aligned, tabular
   --color-fit-check: #8a5300;
   --color-fit-no: #b42318;
 
-  --font-display: 'General Sans', 'PingFang TC', 'Noto Sans TC', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Fraunces', 'Noto Serif TC', ui-serif, serif;
   --font-ui: 'Geist', 'PingFang TC', 'Noto Sans TC', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', 'PingFang TC', 'Noto Sans TC', ui-monospace, monospace;
 
   --radius-card: 32px;
   --radius-card-sm: 24px;
   --radius-image: 24px;
   --radius-input: 16px;
 
-  --shadow-float: 0 14px 20px 4px rgba(4, 69, 144, 0.08);
-  --shadow-button: 0 1px 2px rgba(10, 13, 18, 0.8), 0 0 0 1px #0a0d12;
+  --shadow-float: 0 10px 24px rgba(40, 32, 20, 0.08);
+  --shadow-button: 0 1px 2px rgba(20, 19, 15, 0.6);
 
   --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
 }
 ```
 
-Use the built-in `rounded-full` for pills. Use `--gradient-iris` as plain CSS on the room preview frame (`border-image` or a padded wrapper).
+Use the built-in `rounded-full` for pills.
