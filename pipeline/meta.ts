@@ -29,7 +29,7 @@ export async function call(path: string, body: any, stream = false): Promise<Res
     method: "POST",
     headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json", ...(stream ? { Accept: "text/event-stream" } : {}) },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(120_000), // a stuck request used to hang the whole pipeline
+    signal: AbortSignal.timeout(Number(process.env.META_TIMEOUT_MS ?? 120_000)), // a stuck request used to hang the whole pipeline
   });
   if (!res.ok) throw new Error(`${path} ${res.status}: ${(await res.text()).slice(0, 300)}`);
   if (path === "/responses" && body.model?.startsWith("sam")) record("sam", body.model, SAM_IMAGE, null);
@@ -40,19 +40,19 @@ export async function call(path: string, body: any, stream = false): Promise<Res
 /** Chat completion that returns parsed JSON content and records token cost. */
 // shortcut: a call that timed out may still have been billed, and is retried once (≤ US$0.01 per judge/parts
 // call) because a stuck call used to hang the whole pipeline; use idempotency keys if the Meta API adds them.
-export async function chatJSON(model: string, content: unknown[], schema: object, name = "out", tries = 2): Promise<any> {
+export async function chatJSON(model: string, content: unknown[], schema: object, name = "out", tries = 2, effort = "minimal"): Promise<any> {
   try {
-    return await chatOnce(model, content, schema, name);
+    return await chatOnce(model, content, schema, name, effort);
   } catch (e: any) {
     if (tries <= 1 || !/timeout|abort|\b5\d\d\b/i.test(String(e?.name) + String(e?.message))) throw e;
     console.error(`retrying ${name}: ${String(e?.message).slice(0, 80)}`);
-    return chatJSON(model, content, schema, name, tries - 1);
+    return chatJSON(model, content, schema, name, tries - 1, effort);
   }
 }
 
-async function chatOnce(model: string, content: unknown[], schema: object, name: string): Promise<any> {
+async function chatOnce(model: string, content: unknown[], schema: object, name: string, effort: string): Promise<any> {
   const j: any = await (await call("/chat/completions", {
-    model, reasoning_effort: "minimal", messages: [{ role: "user", content }],
+    model, reasoning_effort: effort, messages: [{ role: "user", content }],
     response_format: { type: "json_schema", json_schema: { name, schema } },
   })).json();
   const u = j.usage ?? {};

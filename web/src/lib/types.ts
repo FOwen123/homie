@@ -15,7 +15,7 @@ export type Room = {
   version: 1; shell: { width: number; depth: number; height: number; walls: Wall[] };
   objects: RoomObject[]; keyframes: Keyframe[]; world_to_room: number[][];
   finishes?: { wall: string; floor: string; ceiling: string; floor_material: string; style: string };
-  capture?: "video"; // built from a plain video (MapAnything): every size is rough
+  capture?: "video"; // built from a plain video (Muse floor plan): every size is rough
   judge?: { model: string; views: number[]; rounds: { round: number; scores: number[]; fixes: number; kept: boolean }[]; final: number[]; issues?: string[][] };
 };
 

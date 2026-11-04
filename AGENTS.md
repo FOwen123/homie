@@ -11,7 +11,7 @@ A website where a Taiwan renter uploads a walk-around video of their room. The e
 
 - `ios/RoomCapture/`: Swift capture app. Records video plus ARKit camera poses, intrinsics, planes and feature points. Its only job is to hand a capture to the website.
 - `eval/`: accuracy tests and research scripts. Outputs go to `eval/out/` (git-ignored).
-- `pipeline/`: capture → room bundle (`process.ts` runs every step). `modal_app.py` hosts processing on Modal (uploads, MapAnything for plain videos via `video_capture.py` + `rescale.py`, room storage, status); `server.ts` is the Mac fallback through a Cloudflare tunnel.
+- `pipeline/`: capture → room bundle (`process.ts` runs every step for app captures; `process_video.ts` for plain videos, where Muse draws the floor plan from the stills in `muse_room.ts`). `modal_app.py` hosts processing on Modal (uploads, both pipelines, room storage, status); `server.ts` is the Mac fallback through a Cloudflare tunnel.
 - `web/`: the website (Vite + React + three.js) and its API (Cloudflare Pages Functions in `web/functions/`).
 
 ## Stack
@@ -25,7 +25,7 @@ A website where a Taiwan renter uploads a walk-around video of their room. The e
 
 - Meta Model API at `https://api.meta.ai/v1`: `muse-spark-1.3` (labels, style, planning, listing parsing), `sam-3.1` (object outlines, decoded with `@meta-sam/parser`), `muse-image-1.0` (photo edits). The rules require Meta models; prefer them for every AI step.
 - **Apify** (Shopee scraper): US$3 in total (raised from US$1 on 2026-11-04). Only well-rated, trusted listings go into the catalog (thresholds in `pipeline/catalog.ts`). Set `maxTotalChargeUsd` on every run and check usage with `GET /v2/users/me/limits` first. Cache results to a file and reuse them.
-- **Modal**: hosts processing (`pipeline/modal_app.py`, tokens in `.env`, secret "homie"); MapAnything on an A100 for plain videos, about US$0.05 a run. Keep test runs on the Mac under ~2 GB of memory (one at a time).
+- **Modal**: hosts processing (`pipeline/modal_app.py`, tokens in `.env`, secret "homie"), CPU only. MapAnything (GPU, about US$0.05 a run) was tried for plain videos and bent the rooms; it stays an experiment in `eval/mapanything_*.py`. Keep test runs on the Mac under ~2 GB of memory (one at a time).
 - Ask the user before adding any other paid service, or spending beyond these caps.
 
 ## Secrets

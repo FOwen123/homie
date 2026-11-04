@@ -112,7 +112,7 @@ async function check(dir: string, room: any, o: any) {
 // Against a wall, the back stays on a wall (pipeline/layout.py's rule beats the check's eye on an oblique view).
 function face(room: any, o: any, front: string, view: any) {
   const n = front === "left_visible_face" ? view.faces[0] : front === "right_visible_face" ? view.faces.at(-1) : null;
-  if (!n) return false;
+  if (!n || room.method === "muse") return false; // in a Muse floor plan the back wall is known; its camera guesses are not
   const q = Math.round(o.yaw / (Math.PI / 2)) % 2 !== 0, hx = (q ? o.size.d : o.size.w) / 2, hz = (q ? o.size.w : o.size.d) / 2;
   const W = room.shell.width / 2, D = room.shell.depth / 2, [cx, , cz] = o.center;
   const walls = [[1, 0, W - cx - hx], [-1, 0, cx - hx + W], [0, 1, D - cz - hz], [0, -1, cz - hz + D]].filter((w) => w[2] < 0.1);
