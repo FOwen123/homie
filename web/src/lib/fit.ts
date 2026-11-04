@@ -182,7 +182,7 @@ export function keepLocal(sent: RoomState, cur: RoomState, out: RoomState): Room
   };
   const list = (s: string[], c: string[], o: string[]) => [...new Set([...o.filter((x) => !s.includes(x) || c.includes(x)), ...c.filter((x) => !s.includes(x))])];
   return { ...out, placements, moved: edits(sent.moved, cur.moved, out.moved), sizeEdits: edits(sent.sizeEdits, cur.sizeEdits, out.sizeEdits),
-    list: list(sent.list, cur.list, out.list), removed: list(sent.removed, cur.removed, out.removed) };
+    taste: edits<unknown>(sent.taste, cur.taste, out.taste) as RoomState["taste"], list: list(sent.list, cur.list, out.list), removed: list(sent.removed, cur.removed, out.removed) };
 }
 
 /** What a moved piece now runs into: "wall", "door-zone" (the 60 cm in front of the door), another piece's

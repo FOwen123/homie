@@ -46,6 +46,7 @@ function bestView(room: Room, pl: Placement, pr: Product) {
     const whole = (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys));
     const box = [Math.max(0, Math.min(...xs)), Math.max(0, Math.min(...ys)), Math.min(k.w, Math.max(...xs)), Math.min(k.h, Math.max(...ys))];
     const shown = box[2] > box[0] && box[3] > box[1] ? ((box[2] - box[0]) * (box[3] - box[1])) / whole : 0;
+    if (box[2] <= box[0] || box[3] <= box[1]) continue; // off screen
     const area = ((box[2] - box[0]) * (box[3] - box[1])) / (k.w * k.h);
     if (shown < 0.35 && area < 0.15) continue; // enough of the spot in frame, or a big part of the frame (a rug around the camera)
     const score = Math.min(area, 0.25) * shown - Math.abs((box[0] + box[2]) / 2 / k.w - 0.5) * 0.1; // big, whole, roughly centred
