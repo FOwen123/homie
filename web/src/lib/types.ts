@@ -38,7 +38,7 @@ export type RoomState = {
 };
 
 export type Card =
-  | { type: "products"; title?: string; items: { product: Product; fit: FitResult; placementId?: string }[] }
+  | { type: "products"; title?: string; replace?: string; items: { product: Product; fit: FitResult; placementId?: string }[] }
   | { type: "photo"; placementId: string; productId: string }
   | { type: "list" };
 

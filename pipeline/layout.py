@@ -1,6 +1,6 @@
 """Line furniture up with the room: square to the walls, inside the room, flush against a wall it nearly
-touches, front facing into the room, tall furniture standing on the floor, and not overlapping other
-furniture. Measured sizes never change; approximate ones may only grow down to the floor.
+touches, front facing into the room, not overlapping other furniture, and never floating (it sits on the
+furniture under it or reaches the floor). Sizes never change, except growing down to the floor.
 Runs after room.py and again after judge.ts (its moves can drift).
 
 Usage: uv run --with numpy python pipeline/layout.py <bundle_dir>   (rewrites <bundle_dir>/room.json)
@@ -13,7 +13,6 @@ import numpy as np
 
 SNAP = 0.35          # an object this close to a wall is standing against it
 WALL_MOUNTED = {"air conditioner", "curtain"}
-FLOOR_STANDING = {"wardrobe", "cabinet", "shelf", "desk", "table", "bed", "sofa", "chair"}
 GAP = 0.01           # leave 1 cm so blocks don't z-fight with the wall
 
 path = Path(sys.argv[1]) / "room.json"
@@ -35,15 +34,6 @@ def clamp(o):
 
 
 for o in objs:
-    # ARKit often misses the bottom of tall furniture (dark, shadowed): these stand on the floor
-    y0 = o["center"][1] - o["size"]["h"] / 2
-    if o["label"] in FLOOR_STANDING and 0.03 < y0 < 0.6:
-        f = (o["size"]["h"] + y0) / o["size"]["h"]
-        for p in o.get("parts") or []:
-            p["size"][1] *= f
-            p["pos"][1] *= f
-        o["size"]["h"] = round(o["size"]["h"] + y0, 3)
-        o["center"][1] = o["size"]["h"] / 2
     o["yaw"] = round(o["yaw"] / (np.pi / 2)) * np.pi / 2
     clamp(o)
     hx, hz = half(o)
@@ -96,6 +86,27 @@ for _ in range(20):
     if not moved:
         break
 
+# Nothing floats: a raised object sits on the furniture under it, or (nothing under it) reaches down to the
+# floor, because ARKit often misses the dark bottom of furniture. Lowest first, so supports settle first.
+def overlaps_xz(a, b):
+    (ahx, ahz), (bhx, bhz) = half(a), half(b)
+    return abs(a["center"][0] - b["center"][0]) < ahx + bhx - 0.02 and abs(a["center"][2] - b["center"][2]) < ahz + bhz - 0.02
+
+for o in sorted(objs, key=lambda o: span(o)[0]):
+    y0 = span(o)[0]
+    if o["label"] in WALL_MOUNTED or y0 <= 0.03:
+        continue
+    tops = [span(b)[1] for b in objs if b is not o and b["label"] not in WALL_MOUNTED and span(b)[1] <= y0 + 0.05 and overlaps_xz(o, b)]
+    if tops:
+        o["center"][1] += max(tops) - y0
+    else:
+        f = (o["size"]["h"] + y0) / o["size"]["h"]
+        for p in o.get("parts") or []:
+            p["size"][1] *= f
+            p["pos"][1] *= f
+        o["size"]["h"] = round(o["size"]["h"] + y0, 3)
+        o["center"][1] = o["size"]["h"] / 2
+
 for o in objs:
     o["center"] = [round(float(v), 3) for v in o["center"]]
     o["yaw"] = round(float(o["yaw"]), 3)
@@ -106,5 +117,6 @@ overlaps = [(a["id"], b["id"]) for i, a in enumerate(objs) for b in objs[i + 1:]
             and min(span(a)[1], span(b)[1]) - max(span(a)[0], span(b)[0]) > 0.02
             and half(a)[0] + half(b)[0] - abs(a["center"][0] - b["center"][0]) > 0.02
             and half(a)[1] + half(b)[1] - abs(a["center"][2] - b["center"][2]) > 0.02]
+assert all(o["label"] in WALL_MOUNTED or span(o)[0] < 0.03 or any(abs(span(b)[1] - span(o)[0]) < 0.01 for b in objs) for o in objs), "something floats"
 assert all(abs(o["yaw"] / (np.pi / 2) - round(o["yaw"] / (np.pi / 2))) < 1e-2 for o in objs)
 print(f"layout: {len(objs)} objects squared to the walls; {len(overlaps)} overlaps left {overlaps}")
