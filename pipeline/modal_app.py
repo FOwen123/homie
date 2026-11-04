@@ -10,7 +10,7 @@
 
 A plain video first goes through MapAnything on a GPU (frames → 3D points and cameras), then
 pipeline/video_capture.py turns that into the capture format, so pipeline/process.ts runs unchanged.
-Raw uploads are deleted once a room is built; rooms are deleted after 30 days.
+Raw uploads are deleted once a room is built; rooms (with their keyframes and crops) are deleted after 30 days.
 
 Deploy (from the repo root; Modal tokens and the secret come from .env):
   set -a; . ./.env; set +a

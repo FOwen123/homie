@@ -45,7 +45,7 @@ uv run --with modal modal deploy pipeline/modal_app.py
 bun pipeline/server.ts
 ```
 
-Public use has soft daily limits (chat, photos, uploads) and every chat request has a bounded size and output, so casual use can't drain the API credits. The limits are KV counters, not atomic: a burst of concurrent requests can pass a few extra; the real ceiling is the Meta account's credit. Uploads go to Modal; raw uploads are deleted once the room is built, rooms after 30 days, and they are never committed.
+Public use has soft daily limits (chat, photos, uploads) and every chat request has a bounded size and output, so casual use can't drain the API credits. The limits are KV counters, not atomic: a burst of concurrent requests can pass a few extra; the real ceiling is the Meta account's credit. Uploads go to Modal; raw uploads are deleted once the room is built, and rooms (with the few keyframes and furniture crops they keep) after 30 days. They are never committed.
 
 ## Scan your own room
 

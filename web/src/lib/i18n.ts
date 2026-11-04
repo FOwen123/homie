@@ -34,7 +34,7 @@ const T = {
   upTip1: { zh: "慢慢走一圈，不要急。", en: "Walk slowly, one full lap." },
   upTip2: { zh: "每面牆、門窗和地板都要拍到。", en: "Show every wall, the doors, the windows and the floor." },
   upTip3: { zh: "約一分鐘，最長 90 秒、300 MB。", en: "About a minute, up to 90 seconds and 300 MB." },
-  upPrivacy: { zh: "影片不會離開你的手機：只上傳約 60 張畫面，處理完就刪除。你的房間會有一個私人連結，30 天後自動刪除。", en: "The video stays on your phone: only about 60 still frames are sent, and they're deleted after processing. Your room gets a private link and is deleted after 30 days." },
+  upPrivacy: { zh: "影片不會離開你的手機：只上傳約 60 張畫面。你的房間（含其中幾張畫面和家具小圖）有一個私人連結，30 天後連同這些圖片自動刪除；其餘上傳檔案處理完就刪除。", en: "The video stays on your phone: only about 60 still frames are sent. Your room, with a few of those frames and furniture crops, gets a private link and is deleted after 30 days; the rest of the upload is deleted once it's built." },
   dropHere: { zh: "把影片拖到這裡，或", en: "Drop a video here, or" },
   qrHint: { zh: "用手機掃描這個 QR code，在手機上開啟這一頁。", en: "Scan this QR code to open this page on your phone." },
   roughVideo: { zh: "一般影片：尺寸為估計值", en: "plain video: sizes are rough" },
