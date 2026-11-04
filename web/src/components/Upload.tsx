@@ -64,7 +64,7 @@ export function Upload() {
   const phone = matchMedia("(pointer: coarse)").matches;
 
   useEffect(() => {
-    if (!phone) QRCode.toDataURL(`${location.origin}/upload`, { margin: 1, width: 160, color: { dark: "#0a0d12", light: "#fafdff" } }).then(setQr);
+    if (!phone) QRCode.toDataURL(`${location.origin}/upload`, { margin: 1, width: 160, color: { dark: "#14130f", light: "#ffffff" } }).then(setQr);
   }, [phone]);
 
   const fail = (status?: number) => setPhase({ kind: "error", msg: status === 429 ? "errBusy" : status === 503 ? "errOffline" : "errFailed" });
@@ -113,7 +113,7 @@ export function Upload() {
         <li>{t("upTip3")}</li>
       </ul>
       <div onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void pick(e.dataTransfer.files[0]); }}
-        className="mt-8 rounded-[32px] bg-bone-white p-8 text-center md:p-12">
+        className="mt-8 rounded-[32px] border border-ink/12 bg-paper-white p-8 text-center md:p-12">
         <p className="text-[16px] text-graphite">{t("dropHere")}</p>
         <button onClick={() => input.current?.click()} disabled={busy}
           className="mt-4 min-h-12 rounded-full bg-charcoal px-6 text-[16px] text-paper-white shadow-button disabled:opacity-40">{t("uploadVideo")}</button>
