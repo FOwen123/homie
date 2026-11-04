@@ -47,3 +47,6 @@ export type Card =
   | { type: "list" };
 
 export type ChatTurn = { role: "user" | "assistant"; text: string; image?: string; cards?: Card[] };
+
+/** What /api/status/<id> reports while the processing server builds an uploaded room. */
+export type RoomStatus = { state: "queued" | "processing" | "done" | "failed"; stage?: "measure" | "objects" | "build" | "check" | "done"; detail?: string; error?: string };

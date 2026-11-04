@@ -75,7 +75,7 @@ await mkdir(out, { recursive: true });
 const names = (await readdir(dir)).filter((n) => n.endsWith(".jpg")).sort();
 const only = process.env.ONLY; // e.g. ONLY=k08.jpg for a single-frame check
 const queue = only ? [only] : names;
-await Promise.all(Array.from({ length: 4 }, async () => { // 4 frames in flight
+await Promise.all(Array.from({ length: 8 }, async () => { // 8 frames in flight
   for (let n; (n = queue.shift()); ) await frame(n).catch((e) => console.error(`${n}: ${e.message}`));
 }));
 

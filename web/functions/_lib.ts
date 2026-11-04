@@ -19,9 +19,20 @@ const asset = async <T,>(env: Env, req: Request, path: string): Promise<T> => {
   if (!res.ok) throw new Error(`asset ${path}: ${res.status}`);
   return res.json<T>();
 };
-export const loadRoom = (env: Env, req: Request, id: string) => {
+/** A file of a room: from the site's own files (the demo), else from the processing server (visitors' rooms). */
+export async function roomFile(env: Env & { ROOMIE_UPLOAD_TOKEN?: string }, req: Request, id: string, path: string) {
   if (!/^[a-z0-9-]{1,40}$/.test(id)) throw new Error("bad room id");
-  return asset<Room>(env, req, `/rooms/${id}/room.json`);
+  const own = await env.ASSETS.fetch(new URL(`/rooms/${id}/${path}`, req.url));
+  // a missing file comes back as the app's index.html (single-page fallback)
+  if (own.ok && !own.headers.get("content-type")?.includes("text/html")) return own;
+  const origin = await env.LIMITS?.get("processor_origin");
+  if (!origin || !env.ROOMIE_UPLOAD_TOKEN) return new Response("not found", { status: 404 });
+  return fetch(`${origin}/rooms/${id}/${path}`, { headers: { "x-roomie-token": env.ROOMIE_UPLOAD_TOKEN } });
+}
+export const loadRoom = async (env: Env, req: Request, id: string) => {
+  const res = await roomFile(env, req, id, "room.json");
+  if (!res.ok) throw new Error(`room ${id}: ${res.status}`);
+  return res.json<Room>();
 };
 export const loadCatalog = (env: Env, req: Request) => asset<Product[]>(env, req, "/catalog.json");
 

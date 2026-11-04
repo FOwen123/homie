@@ -1,5 +1,6 @@
 // One command from a Room Capture recording to a website room bundle:
-//   keyframes → Muse labels + SAM masks → measurements → room.json → fit + crops → Muse parts → judge.
+//   keyframes → Muse labels + SAM masks → measurements → room.json → fit + crops → builder agents → judge.
+// Lines starting with "progress " are for the loading screen (pipeline/server.ts and the Modal app read them).
 // Usage: bun pipeline/process.ts <capture_dir> <bundle_dir>
 import { $ } from "bun";
 import { mkdir, cp } from "node:fs/promises";
@@ -17,17 +18,22 @@ const step = async (name: string, fn: () => Promise<unknown>) => {
   console.log(`${((Date.now() - t) / 1000).toFixed(0)} s`);
 };
 
+const meta = await Bun.file(join(capture, "meta.json")).json();
+const video = meta.source === "mapanything"; // a plain video, reconstructed by MapAnything (pipeline/video_capture.py)
+const every = meta.keyframe_every ?? 50;
 await mkdir(join(work, "kf"), { recursive: true });
 await step("keyframes", () =>
-  $`ffmpeg -v error -y -noautorotate -i ${join(capture, "video.mov")} -vf ${"select='not(mod(n\\,50))',transpose=1,scale=960:-1"} -fps_mode passthrough -q:v 3 ${join(work, "kf", "k%02d.jpg")}`);
+  $`ffmpeg -v error -y -noautorotate -i ${join(capture, "video.mov")} -vf ${`select='not(mod(n\\,${every}))',transpose=1,scale=960:-1`} -fps_mode passthrough -q:v 3 ${join(work, "kf", "k%02d.jpg")}`);
 await step("labels + masks (Muse, SAM)", () => $`bun ${join(import.meta.dir, "segment.ts")} ${join(work, "kf")} ${join(work, "seg")}`.quiet());
 await step("measure on ARKit planes", () => py("measure.py", capture, join(work, "seg"), join(work, "measure.json")).quiet());
 await step("room shell + objects", () => py("room.py", capture, join(work, "seg"), join(work, "kf"), join(work, "measure.json"), bundle));
+if (video) await step("real-world scale from known-size objects", () => py("rescale.py", bundle));
 await step("line furniture up with the walls", () => py("layout.py", bundle));
 await cp(join(work, "kf"), join(bundle, "keyframes"), { recursive: true });
 await step("fit estimated pieces to their outlines, one crop each", () => py("fit_boxes.py", bundle, join(work, "seg")));
 await step("line up again after fitting", () => py("layout.py", bundle));
-await step("furniture parts + finishes (Muse)", () => $`bun ${join(import.meta.dir, "parts.ts")} ${bundle}`.quiet());
-await step("judge: blocks vs real frames (Muse)", () => $`bun ${join(import.meta.dir, "judge.ts")} ${bundle}`.quiet());
+await step("builder agents: parts, self-check, rebuild (Muse)", () => $`bun ${join(import.meta.dir, "parts.ts")} ${bundle}`);
+await step("line up after building", () => py("layout.py", bundle));
+await step("judge: blocks vs real frames (Muse)", () => $`bun ${join(import.meta.dir, "judge.ts")} ${bundle}`);
 await step("re-square after the judge's moves", () => py("layout.py", bundle));
 console.log(`done → ${bundle}`);

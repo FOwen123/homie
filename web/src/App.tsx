@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Chat, ShopAll, ShoppingList, freshPhotos, photoKey } from "./components/Chat";
 import { RoomViewer, type ViewMode } from "./components/RoomViewer";
+import { Upload } from "./components/Upload";
+import { Building } from "./components/Building";
 import { FitBadge, MeasureChip, Segmented, Tabs, dims, ntd } from "./components/bits";
 import { checkFit, findSpot, moveIn, productMap, replaceSpot, withMoves } from "./lib/fit";
 import { LangContext, type Lang, useLang, useT } from "./lib/i18n";
-import type { ChatTurn, FitResult, Product, Room, RoomState } from "./lib/types";
+import type { ChatTurn, FitResult, Product, Room, RoomState, RoomStatus } from "./lib/types";
 
 const EMPTY: RoomState = { placements: [], removed: [], sizeEdits: {}, taste: {}, list: [] };
 function useStored<T>(key: string, init: T) {
@@ -13,14 +15,33 @@ function useStored<T>(key: string, init: T) {
   return [v, setV] as const;
 }
 
+/** The JSON at this URL, or null while it isn't there yet (Pages answers a missing file with index.html). */
+async function getJson<T>(url: string): Promise<T | null> {
+  try {
+    const r = await fetch(url);
+    return r.ok ? ((await r.json()) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const [lang, setLang] = useStored<Lang>("roomie:lang", navigator.language.startsWith("zh") ? "zh" : "en");
   useEffect(() => { document.documentElement.lang = lang === "zh" ? "zh-Hant-TW" : "en"; }, [lang]);
   const m = location.pathname.match(/^\/room\/([a-z0-9-]+)/);
   return (
     <LangContext.Provider value={{ lang, setLang }}>
-      {m ? <RoomPage id={m[1]} /> : <Landing />}
+      {location.pathname === "/upload" ? <UploadPage /> : m ? <RoomPage id={m[1]} /> : <Landing />}
     </LangContext.Provider>
+  );
+}
+
+function UploadPage() {
+  return (
+    <main className="mx-auto max-w-[1200px] px-4 py-6 md:px-10">
+      <Header />
+      <Upload />
+    </main>
   );
 }
 
@@ -51,10 +72,6 @@ function Header({ children }: { children?: React.ReactNode }) {
     </header>
   );
 }
-
-// shortcut: no public TestFlight link yet, so the app button opens the build-it-yourself steps; set it once beta review passes
-const TESTFLIGHT_URL: string | undefined = undefined;
-const SCAN_STEPS = "https://github.com/FOwen123/desk#scan-your-own-room";
 
 const HERO_LAMP = "sp28361311399"; // Xiaomi Smart Desk Lamp 2: a real catalog listing, fit checked by code on the demo room
 const STEP_LAMP = "sp8812597921"; // Foldable LED Desk Lamp
@@ -92,7 +109,7 @@ function Landing() {
           <p className="max-w-[460px] text-[18px] leading-[1.55] text-graphite md:text-[19px]">{t("sub")}</p>
           <div className="flex flex-wrap gap-3">
             <a href="/room/demo" className={`${button} bg-charcoal text-paper-white`}>{t("openDemo")} →</a>
-            <a href="#try" className={`${button} border border-ink/16`}>{t("scanOwn")}</a>
+            <a href="/upload" className={`${button} border border-ink/16`}>{t("scanOwn")}</a>
           </div>
           <dl className="flex gap-6 pt-2 text-[13px] text-graphite">
             {([["1 min", "stat1"], ["iPhone", "stat2"], ["± cm", "stat3"]] as const).map(([v, k], i) => (
@@ -142,10 +159,10 @@ function Landing() {
           <li>3. {t("try3")}</li>
         </ol>
         <div className="mt-8 flex flex-wrap gap-3">
-          <a href={TESTFLIGHT_URL ?? SCAN_STEPS} className={`${button} bg-charcoal text-paper-white`}>{t(TESTFLIGHT_URL ? "getApp" : "buildApp")}</a>
+          <a href="/upload" className={`${button} bg-charcoal text-paper-white`}>{t("uploadVideo")}</a>
           <a href="/room/demo" className={`${button} border border-ink/16`}>{t("openDemo")}</a>
         </div>
-        <p className="mt-4 text-[13px] text-fog">{t("iphoneOnly")}</p>
+        <p className="mt-4 text-[13px] text-fog">{t("iphoneNote")}</p>
       </section>
       <footer className="flex flex-col justify-between gap-2 border-t border-ink/8 py-8 text-[13px] text-fog md:flex-row">
         <span>Muse Spark · SAM 3.1 · Muse Image · ARKit</span><span>{t("builtFor")}</span>
@@ -196,6 +213,7 @@ function RoomPage({ id }: { id: string }) {
   const t = useT();
   const url = `/rooms/${id}`;
   const [room, setRoom] = useState<Room | null>(null);
+  const [status, setStatus] = useState<RoomStatus | null>(null); // how far the build has got, while it is not done
   const [catalog, setCatalog] = useState<Product[]>([]);
   const [state, setState] = useStored<RoomState>(`roomie:${id}:state`, EMPTY);
   const [turns, setTurns] = useStored<ChatTurn[]>(`roomie:${id}:chat`, []);
@@ -231,10 +249,37 @@ function RoomPage({ id }: { id: string }) {
   });
 
   useEffect(() => {
-    fetch(`${url}/room.json`).then((r) => r.json()).then(setRoom);
+    // A room is ready once room.json has its judge step. Until then (or without one) poll the build status every 3 s.
+    const live = { alive: true, timer: 0, stage: undefined as string | undefined, haveRoom: false };
+    const show = (r: Room | null) => {
+      if (r && (r.judge || (r.objects?.length && r.keyframes?.length))) { live.haveRoom = true; setRoom(r); } // partial rooms wait for objects and keyframes
+    };
+    const tick = async () => {
+      const s = await getJson<Partial<RoomStatus>>(`/api/status/${id}`);
+      if (!live.alive) return;
+      if (!s) { live.timer = window.setTimeout(tick, 3000); return; } // server hiccup: ask again
+      const next: RoomStatus = s.state ? (s as RoomStatus) : { state: "failed", error: s.error };
+      setStatus(next);
+      if (next.state === "failed") return;
+      if (next.stage !== live.stage || !live.haveRoom || next.state === "done") {
+        live.stage = next.stage;
+        show(await getJson<Room>(`${url}/room.json`));
+        if (!live.alive) return;
+      }
+      if (next.state !== "done") live.timer = window.setTimeout(tick, 3000);
+    };
+    void (async () => {
+      const r = await getJson<Room>(`${url}/room.json`);
+      if (!live.alive) return;
+      show(r);
+      if (!r?.judge) void tick();
+    })();
+    return () => { live.alive = false; window.clearTimeout(live.timer); };
+  }, [id, url]);
+  useEffect(() => {
     fetch("/catalog.json").then((r) => r.json()).then(setCatalog);
   }, [url]);
-  useEffect(() => { if (!turns.length) setTurns([{ role: "assistant", text: t("greeting") }]); }, []); // eslint-disable-line
+  useEffect(() => { if (room && !turns.length) setTurns([{ role: "assistant", text: t("greeting") }]); }, [room]); // eslint-disable-line
   useEffect(() => { // "Show me" on a not-yet-placed product: place it, then ask for a photo
     const h = (e: Event) => {
       if (!room) return;
@@ -254,7 +299,18 @@ function RoomPage({ id }: { id: string }) {
     return () => window.removeEventListener("roomie:place", h);
   }, [room, state, products, turns]);
 
-  if (!room) return <div className="grid h-full place-items-center text-fog"><span className="pulse-dot h-3 w-3 rounded-full bg-powder-blue" /></div>;
+  if (!room && !status) return <div className="grid h-full place-items-center text-fog"><span className="pulse-dot h-3 w-3 rounded-full bg-powder-blue" /></div>;
+  if (!room) return ( // being built: the steps, and the chat waits for the room
+    <div className="flex h-full flex-col gap-3 px-3 pt-3 md:gap-6 md:px-6 md:pt-5">
+      <Header />
+      <section className="relative h-[46svh] shrink-0 md:h-full md:flex-1">
+        <div className="iris-frame h-full">
+          <div className="grid h-full place-items-center overflow-hidden rounded-[24px] bg-sky-tint p-4">{status && <Building status={status} />}</div>
+        </div>
+      </section>
+      <p className="px-1 text-[15px] text-graphite">{t("chatWaiting")}</p>
+    </div>
+  );
   const shown = withMoves(room, state); // the room as the user rearranged it
   const obj = shown.objects.find((o) => o.id === selected);
   const placed = state.placements.find((p) => p.id === selected);
@@ -276,6 +332,9 @@ function RoomPage({ id }: { id: string }) {
             <RoomViewer room={room} state={state} products={products} mode={mode} selected={selected}
               onSelect={(sel) => { setSelected(sel); if (room.objects.some((o) => o.id === sel)) setTab("shop"); }} onLabel={setLabel}
               onMove={(id, pose) => setState(moveIn(state, id, pose))} />
+            {status && status.state !== "done" && status.state !== "failed" && ( // a room already shown stays as it is if its build failed
+              <div className="absolute inset-x-3 top-3 z-10 md:inset-x-6 md:top-6"><Building status={status} /></div>
+            )}
             <div className="pointer-events-none absolute bottom-3 left-3 flex flex-col items-start gap-2 md:bottom-5 md:left-5">
               {past.length > 0 && (
                 <button onClick={undo} title={`${t("undo")} (Ctrl+Z / ⌘Z)`} className="pointer-events-auto flex min-h-11 items-center gap-1.5 rounded-full bg-paper-white px-4 text-[14px] shadow-float">

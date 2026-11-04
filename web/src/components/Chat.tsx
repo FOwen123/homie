@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SWAP, checkFit, findSpot, keepLocal, replaceSpot } from "../lib/fit";
-import { LABEL_ZH, LangContext, useLang, useT } from "../lib/i18n";
+import { type Key, LABEL_ZH, LangContext, useLang, useT } from "../lib/i18n";
 import type { Card, ChatTurn, FitResult, Placement, Product, Room, RoomObject, RoomState } from "../lib/types";
 import { ProductCard, dims, ntd } from "./bits";
 
@@ -20,6 +20,15 @@ async function shrink(file: File): Promise<string> {
   return await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result as string); fr.readAsDataURL(blob); });
 }
 
+const FIRST_CHIPS: Key[] = ["quickPlan", "quick1", "quick2", "quick3"];
+/** Suggested replies from the last turn and the room, no model call: a plan waiting for a yes, else room follow-ups. */
+function followUps(turns: ChatTurn[], state: RoomState): Key[] {
+  const last = turns.at(-1);
+  if (!last || last.role !== "assistant") return [];
+  if (!last.cards?.some((c) => c.type === "products") && /[?？]$/.test(last.text.trim())) return ["followYes", "followChange"];
+  return state.placements.length ? ["followPhoto", "followCheaper", "followMore"] : [];
+}
+
 export function Chat({ roomId, room, state, setState, products, turns, setTurns, onFocus, selected }: Props) {
   const t = useT();
   const { lang } = useLang();
@@ -28,6 +37,7 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
   const [busy, setBusy] = useState(false);
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [turns, busy]);
+  const chips = turns.length <= 1 ? FIRST_CHIPS : followUps(turns, state);
 
   async function send(msg: string, img = image) {
     if (!msg.trim() && !img) return;
@@ -72,9 +82,9 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
           </div>
         ))}
         {busy && <div className="flex items-center gap-2 text-[15px] text-fog"><span className="pulse-dot h-2 w-2 rounded-full bg-powder-blue" />{t("thinking")}</div>}
-        {turns.length <= 1 && !busy && (
+        {chips.length > 0 && !busy && (
           <div className="flex flex-wrap gap-2">
-            {(["quickPlan", "quick1", "quick2", "quick3"] as const).map((k) => (
+            {chips.map((k) => (
               <button key={k} onClick={() => send(t(k))} className="min-h-11 rounded-full bg-paper px-4 text-[15px]">{t(k)}</button>
             ))}
           </div>

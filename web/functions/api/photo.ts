@@ -2,7 +2,7 @@
 // insert the product there (frame + product photo + where it goes, at what size). Always labelled
 // "AI-generated preview" in the UI.
 import type { Keyframe, Placement, Product, Room } from "../../src/lib/types";
-import { type Env, json, loadCatalog, loadRoom, meta, underLimit } from "../_lib";
+import { type Env, json, loadCatalog, loadRoom, meta, roomFile, underLimit } from "../_lib";
 
 const NEAR = 0.2; // m in front of the camera
 /** Room point → camera coordinates (ARKit: the camera looks down -z). */
@@ -71,7 +71,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const view = bestView(room, placement, pr);
   if (!view) return json({ error: "no frame shows that spot" }, 422);
   const [frame, photo] = await Promise.all([
-    env.ASSETS.fetch(new URL(`/rooms/${roomId}/${view.k.file}`, request.url)).then(toDataUrl),
+    roomFile(env, request, roomId, view.k.file).then(toDataUrl),
     fetch(pr.image).then(toDataUrl),
   ]);
   const pct = (v: number, n: number) => Math.round(Math.min(100, Math.max(0, (v / n) * 100)));

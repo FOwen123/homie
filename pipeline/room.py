@@ -18,7 +18,8 @@ import numpy as np
 from PIL import Image
 
 cap, seg, kfdir, measure_path, out = map(Path, sys.argv[1:6])
-KF_STEP, SW, SH, SENSOR_H = 50, 960, 1280, 1440
+KF_STEP = json.loads((cap / "meta.json").read_text()).get("keyframe_every", 50)  # keyframe kNN = video frame (NN-1)*KF_STEP
+SW, SH, SENSOR_H = 960, 1280, 1440
 S = SENSOR_H / SW
 SKIP = {"floor", "wall", "ceiling", "ceiling beam", "beam", "light switch", "power outlet", "access panel",
         "utility panel", "electrical panel", "floor mat", "doorway"}
