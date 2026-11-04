@@ -91,6 +91,7 @@ export function RoomViewer({ room, state, products, mode, selected, onSelect, on
   const { lang } = useLang();
   const [edit, setEdit] = useState<Edit>("move");
   const [hit, setHit] = useState<string | null>(null); // what the selected piece runs into
+  const dimLabels = useRef<(HTMLSpanElement | null)[]>([]);
   const live = useRef({ state, products, mode, selected, onSelect, onLabel, onMove, edit, setHit });
   live.current = { state, products, mode, selected, onSelect, onLabel, onMove, edit, setHit };
 
@@ -127,6 +128,25 @@ export function RoomViewer({ room, state, products, mode, selected, onSelect, on
     const blocks = new THREE.Group();
     const products = new THREE.Group();
     scene.add(floor, walls, blocks, products);
+
+    // Dimension lines (overview only): width along the near +z edge, depth along the +x edge, height up the
+    // far +x/-z corner, each with extension lines and end ticks; labels are HTML pinned in the frame loop.
+    const { width: W, depth: D, height: H } = room.shell, O = 0.25, T = 0.06;
+    const seg: number[] = [];
+    const line = (a: number[], b: number[]) => seg.push(...a, ...b);
+    line([-W / 2, 0, D / 2 + O], [W / 2, 0, D / 2 + O]);
+    line([W / 2 + O, 0, -D / 2], [W / 2 + O, 0, D / 2]);
+    line([W / 2 + O, 0, -D / 2], [W / 2 + O, H, -D / 2]);
+    for (const s of [-1, 1]) {
+      line([(s * W) / 2, 0, D / 2], [(s * W) / 2, 0, D / 2 + O + T]);
+      line([W / 2, 0, (s * D) / 2], [W / 2 + O + T, 0, (s * D) / 2]);
+    }
+    for (const y of [0, H]) line([W / 2 + O - T, y, -D / 2], [W / 2 + O + T, y, -D / 2]);
+    const dimLines = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute(seg, 3)),
+      new THREE.LineBasicMaterial({ color: IRIS }));
+    dimLines.position.y = 0.005; // just above the floor so it doesn't flicker
+    scene.add(dimLines);
+    const dimAt = [new THREE.Vector3(0, 0, D / 2 + O), new THREE.Vector3(W / 2 + O, 0, 0), new THREE.Vector3(W / 2 + O, H / 2, -D / 2)];
 
     // Move and rotate (like Rumi): floor arrows only, or the turning ring only; the piece turns red while it
     // runs into something, and lets go flush against a wall it ends up within 8 cm of.
@@ -330,6 +350,16 @@ export function RoomViewer({ room, state, products, mode, selected, onSelect, on
           else m.visible = !facing; // opening frames on a faded wall would float in the room
         }
       }
+      dimLines.visible = overview;
+      dimAt.forEach((p, i) => {
+        const label = dimLabels.current[i];
+        if (!label) return;
+        v.copy(p).project(camera);
+        const x = ((v.x + 1) / 2) * el.clientWidth;
+        const show = overview && v.z < 1 && x < el.clientWidth - 110; // keep clear of the move buttons on the right edge
+        label.style.display = show ? "block" : "none";
+        if (show) label.style.transform = `translate(${x}px, ${((1 - v.y) / 2) * el.clientHeight}px) translate(-50%, -50%)`;
+      });
       const { selected, onLabel } = live.current;
       if (onLabel) {
         const g = [blocks, products].filter((x) => x.visible).flatMap((x) => x.children).find((c) => c.userData.id === selected);
@@ -371,6 +401,12 @@ export function RoomViewer({ room, state, products, mode, selected, onSelect, on
       <div ref={host} tabIndex={0} role="application" aria-label={`${t("viewerLabel")} ${t("keysHint")}`}
         onKeyDown={(e) => key(e, true)} onKeyUp={(e) => key(e, false)} onBlur={() => api.current && Object.assign(api.current.hold, { fwd: 0, turn: 0 })}
         className="relative h-full w-full touch-none rounded-[24px] focus-visible:outline-offset-[-4px]" />
+      {[room.shell.width, room.shell.depth, room.shell.height].map((m, i) => (
+        <span key={i} ref={(e) => { dimLabels.current[i] = e; }} aria-hidden
+          className="num pointer-events-none absolute top-0 left-0 z-10 hidden whitespace-nowrap rounded-full border-[1.5px] border-iris bg-paper-white px-2.5 py-0.5 text-[13px] text-iris">
+          {Math.round(m * 100)} cm
+        </span>
+      ))}
       <div className="absolute top-1/2 right-2 flex -translate-y-1/2 flex-col gap-0.5 rounded-full bg-paper-white/90 p-1 shadow-float" aria-label={t("moveControls")} role="group">
         <PadButton label={fwdLabel[0]} hold={{ fwd: 1 }} api={api}>{mode === "blocks" ? <><path d="M12 5v14" /><path d="M5 12h14" /></> : <path d="m6 15 6-6 6 6" />}</PadButton>
         <PadButton label={fwdLabel[1]} hold={{ fwd: -1 }} api={api}>{mode === "blocks" ? <path d="M5 12h14" /> : <path d="m6 9 6 6 6-6" />}</PadButton>
