@@ -122,9 +122,9 @@ def process(rid: str, kind: str):
 products = modal.Dict.from_name("homie-products", create_if_missing=True)
 
 
-@app.function(image=image, secrets=[secret], max_containers=1, timeout=240)
+@app.function(image=image, secrets=[secret], max_containers=4, timeout=240)
 def search_products(query: str):
-    """One paid search at a time, one a day. All users reuse the results."""
+    """Live Shopee search, no daily cap; the US$3 Apify budget guard stays. All users reuse results for 24 h."""
     import urllib.request
 
     key = "query:" + hashlib.sha256(query.strip().lower().encode()).hexdigest()
@@ -147,9 +147,6 @@ def search_products(query: str):
     reserved = max(used, float(status.get("apify:reserved", 0)))
     if reserved + 0.10 > 3:
         return {"products": [], "source": "cache", "notice": "Live search budget reached; using saved listings."}
-    day = time.strftime("%Y-%m-%d")
-    if not status.put("shop:" + day, 1, skip_if_exists=True):
-        return {"products": [], "source": "cache", "notice": "Today's live search was used; using saved listings."}
     status["apify:reserved"] = reserved + 0.10  # never refund uncertain charges or reset the lifetime reservation
     try:
         rows = apify("/acts/memo23~shopee-scraper/run-sync-get-dataset-items?maxTotalChargeUsd=0.04&memory=512&timeout=75", {
@@ -268,7 +265,11 @@ def web():
         query = str(body.get("query", "")).strip()
         if not query or len(query) > 160:
             return JSONResponse({"error": "invalid query"}, 400)
-        return await search_products.remote.aio(query)
+        call = await search_products.spawn.aio(query)
+        try:  # a live search takes ~100 s; chat waits 25 s, then the search finishes in the background and is cached
+            return await call.get.aio(timeout=25)
+        except (TimeoutError, modal.exception.TimeoutError):
+            return {"products": [], "source": "cache", "notice": "Live Shopee results are still loading; using saved listings for now."}
 
     @api.post("/upload")
     async def upload(req: Request):
