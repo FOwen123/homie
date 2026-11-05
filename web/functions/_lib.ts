@@ -1,7 +1,7 @@
 // Shared helpers for the Cloudflare Pages Functions.
 import type { Product, Room } from "../src/lib/types";
 
-export type Env = { META_MODEL_API_KEY: string; ASSETS: Fetcher; LIMITS?: KVNamespace };
+export type Env = { META_MODEL_API_KEY: string; ASSETS: Fetcher; LIMITS?: KVNamespace; ROOMIE_UPLOAD_TOKEN?: string };
 export const API = "https://api.meta.ai/v1";
 
 export async function meta(env: Env, path: string, body: unknown) {
@@ -34,7 +34,22 @@ export const loadRoom = async (env: Env, req: Request, id: string) => {
   if (!res.ok) throw new Error(`room ${id}: ${res.status}`);
   return res.json<Room>();
 };
-export const loadCatalog = (env: Env, req: Request) => asset<Product[]>(env, req, "/catalog.json");
+export async function processor(env: Env, path: string, body?: unknown) {
+  const origin = await env.LIMITS?.get("processor_origin");
+  if (!origin || !env.ROOMIE_UPLOAD_TOKEN) throw new Error("Live search is not configured");
+  const res = await fetch(`${origin}${path}`, { method: body === undefined ? "GET" : "POST",
+    headers: { "x-roomie-token": env.ROOMIE_UPLOAD_TOKEN, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body) });
+  if (!res.ok) throw new Error("Live search unavailable");
+  return res;
+}
+export async function loadCatalog(env: Env, req: Request) {
+  const saved = await asset<Product[]>(env, req, "/catalog.json");
+  try {
+    const live = await (await processor(env, "/products")).json<Product[]>();
+    return [...new Map([...saved, ...live].map((p) => [p.id, p])).values()];
+  } catch { return saved; }
+}
 
 /** Daily counters per visitor and overall, so public use can't drain the Meta credits. */
 export async function underLimit(env: Env, req: Request, kind: "chat" | "photo" | "upload", perIp: number, total: number) {

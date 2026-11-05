@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { SWAP, checkFit, findSpot, keepLocal, replaceSpot } from "../lib/fit";
 import { type Key, LABEL_ZH, LangContext, useLang, useT } from "../lib/i18n";
 import type { Card, ChatTurn, FitResult, Placement, Product, Room, RoomObject, RoomState } from "../lib/types";
@@ -7,6 +7,7 @@ import { ProductCard, dims, ntd } from "./bits";
 type Props = {
   roomId: string; room: Room; state: RoomState; setState: React.Dispatch<React.SetStateAction<RoomState>>; products: Map<string, Product>;
   turns: ChatTurn[]; setTurns: (t: ChatTurn[]) => void; onFocus: (id: string) => void; selected?: string | null;
+  setCatalog?: (products: Product[]) => void; autoRecommend?: boolean;
   opened: string[]; setOpened: React.Dispatch<React.SetStateAction<string[]>>; // checkout progress, shared by every list
 };
 /** Put a product in the room (App listens): swapped in for `replace`, or on a free spot. */
@@ -30,7 +31,7 @@ function followUps(turns: ChatTurn[], state: RoomState): Key[] {
   return state.placements.length ? ["followPhoto", "followCheaper", "followMore"] : [];
 }
 
-export function Chat({ roomId, room, state, setState, products, turns, setTurns, onFocus, selected, opened, setOpened }: Props) {
+export function Chat({ roomId, room, state, setState, products, turns, setTurns, onFocus, selected, opened, setOpened, setCatalog, autoRecommend }: Props) {
   const t = useT();
   const { lang } = useLang();
   const [text, setText] = useState("");
@@ -40,7 +41,11 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
   useEffect(() => { end.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [turns, busy]);
   const chips = turns.length <= 1 ? FIRST_CHIPS : followUps(turns, state);
 
+  const introduced = useRef(false);
+
+
   async function send(msg: string, img = image) {
+    if (busy) return;
     if (!msg.trim() && !img) return;
     const next = [...turns, { role: "user" as const, text: msg.trim(), image: img }];
     setTurns(next);
@@ -50,6 +55,7 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
         body: JSON.stringify({ roomId, lang, messages: next.map(({ role, text, image }) => ({ role, text, image })), state, selected }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error === "busy" ? t("busy") : j.error);
+      if (j.products) setCatalog?.(j.products);
       setState((cur) => keepLocal(state, cur, j.state)); // the reply is built on the state as it was sent
       const placed = j.state.placements.at(-1) as Placement | undefined;
       if (placed && placed.id !== state.placements.at(-1)?.id) onFocus(placed.id);
@@ -57,13 +63,23 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
         const p = c.type === "photo" && (j.state as RoomState).placements.find((x) => x.id === c.placementId);
         if (p) freshPhotos.add(photoKey(p));
       }
-      setTurns([...next, { role: "assistant", text: j.reply, cards: j.cards }]);
+      setTurns([...next, { role: "assistant", text: [j.reply, ...(j.notices ?? [])].filter(Boolean).join("\n"), cards: j.cards }]);
     } catch (e: any) {
       setTurns([...next, { role: "assistant", text: e.message }]);
     } finally {
       setBusy(false);
     }
   }
+
+  const introduce = useEffectEvent(() => {
+    void send(lang === "zh" ? "列出房間裡的家具，並找適合這個空間的蝦皮商品。先推薦，不要移除或替換現有家具。" : "List the furniture in my room and find Shopee products for this space. Show suggestions without removing or replacing my furniture.");
+  });
+  useEffect(() => {
+    if (autoRecommend && !introduced.current && turns.length <= 1 && products.size > 0) {
+      introduced.current = true;
+      introduce();
+    }
+  }, [autoRecommend, products.size, turns.length]);
 
   return (
     <div className="flex h-full flex-col">
@@ -88,7 +104,7 @@ export function Chat({ roomId, room, state, setState, products, turns, setTurns,
       {chips.length > 0 && !busy && (
         // one swipeable row just above the composer, fading at the right edge so it reads as scrollable
         <div role="group" aria-label={t("suggestions")}
-          className="flex snap-x gap-2 overflow-x-auto px-4 pt-1 [mask-image:linear-gradient(to_right,black_calc(100%-28px),transparent)] [scrollbar-width:none] md:px-5">
+          className="flex snap-x scroll-px-4 gap-2 overflow-x-auto px-4 pt-1 md:scroll-px-5 [mask-image:linear-gradient(to_right,black_calc(100%-28px),transparent)] [scrollbar-width:none] md:px-5">
           {chips.map((k) => (
             <button key={k} onClick={() => send(t(k))}
               className="min-h-11 shrink-0 snap-start whitespace-nowrap rounded-full border border-ink/10 bg-paper px-4 text-[14px] text-ink hover:bg-sand">{t(k)}</button>
@@ -128,6 +144,7 @@ function Avatar() {
 
 function CardView({ card, roomId, room, state, setState, products, onFocus, opened, setOpened }: { card: Card } & Omit<Props, "turns" | "setTurns" | "selected">) {
   const t = useT();
+  if (card.type === "objects") return <RoomInventory {...{ room, state, setState, products, onFocus }} />;
   if (card.type === "products") {
     return (
       <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1">
@@ -137,7 +154,8 @@ function CardView({ card, roomId, room, state, setState, products, onFocus, open
           return (
             <ProductCard key={product.id} product={product} fit={liveFit} inList={state.list.includes(product.id)}
               onAdd={() => setState({ ...state, list: [...state.list, product.id] })}
-              onShow={() => (placement ? onFocus(placement.id) : place(product.id, card.replace))} />
+              onShow={() => (placement ? onFocus(placement.id) : place(product.id, card.replace))}
+              onDelete={placement ? () => setState((cur) => deleteRoomItem(cur, placement.id)) : undefined} />
           );
         })}
       </div>
@@ -149,6 +167,35 @@ function CardView({ card, roomId, room, state, setState, products, onFocus, open
     return <PhotoCard key={placement ? photoKey(placement) : card.placementId} roomId={roomId} placement={placement} />;
   }
   return <ShoppingList state={state} setState={setState} products={products} t={t} opened={opened} setOpened={setOpened} />;
+}
+
+export function deleteRoomItem(state: RoomState, id: string): RoomState {
+  const placed = state.placements.find((p) => p.id === id);
+  const placements = state.placements.filter((p) => p.id !== id);
+  return { ...state, placements,
+    removed: placed ? state.removed : [...new Set([...state.removed, id])],
+    list: placed && !placements.some((p) => p.productId === placed.productId) ? state.list.filter((x) => x !== placed.productId) : state.list };
+}
+
+export function RoomInventory({ room, state, setState, products, onFocus }: Pick<Props, "room" | "state" | "setState" | "products" | "onFocus">) {
+  const { lang } = useLang();
+  const t = useT();
+  const items = [
+    ...room.objects.filter((o) => !state.removed.includes(o.id)).map((o) => ({ id: o.id, label: lang === "zh" ? LABEL_ZH[o.label] ?? o.label : o.label, size: state.sizeEdits[o.id] ?? o.size, source: o.source === "approx" ? `≈ ±${o.pm_cm} cm` : `±${o.pm_cm} cm` })),
+    ...state.placements.map((p) => { const product = products.get(p.productId); return { id: p.id, label: product?.title_en ?? product?.title ?? p.productId, size: product?.size, source: product?.size_source === "listing" ? t("store") : t("approx") }; }),
+  ];
+  return <details className="shrink-0 border-b border-ink/8 px-4 py-2">
+    <summary className="min-h-11 cursor-pointer py-3 text-[15px]">{lang === "zh" ? "房間物件" : "Room items"} · {items.length}</summary>
+    <div className="max-h-52 overflow-y-auto">
+      {items.length === 0 && <p className="py-2 text-[14px] text-graphite">{lang === "zh" ? "房間裡沒有家具，可以開始規劃。" : "Your layout is empty and ready to plan."}</p>}
+      {items.map((item) => <div key={item.id} className="flex items-center gap-2 border-t border-ink/6">
+        <button className="min-h-11 min-w-0 flex-1 py-2 text-left text-[14px]" onClick={() => onFocus(item.id)}>
+          <span className="block truncate">{item.label}</span><span className="num text-[11px] text-graphite">{item.size && dims(item.size)} · {item.source}</span>
+        </button>
+        <button aria-label={`${t("remove")} ${item.label}`} onClick={() => setState((cur) => deleteRoomItem(cur, item.id))} className="min-h-11 shrink-0 px-3 text-[13px] text-graphite hover:text-fit-no">{t("remove")}</button>
+      </div>)}
+    </div>
+  </details>;
 }
 
 // Each AI photo costs a Muse Image call: generate only for photo cards created in this visit, cache the

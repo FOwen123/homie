@@ -27,7 +27,7 @@ export function FitBadge({ fit }: { fit: FitResult }) {
   return <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] ${style}`}>{icon} {lang === "zh" ? fit.reason_zh : fit.reason_en}</span>;
 }
 
-export function ProductCard({ product, fit, inList, onShow, onAdd }: { product: Product; fit: FitResult; inList: boolean; onShow: () => void; onAdd: () => void }) {
+export function ProductCard({ product, fit, inList, onShow, onAdd, onDelete }: { product: Product; fit: FitResult; inList: boolean; onShow: () => void; onAdd: () => void; onDelete?: () => void }) {
   const t = useT();
   return (
     <article className="flex w-[216px] shrink-0 snap-start flex-col gap-2 rounded-[22px] border border-ink/10 bg-paper-white p-2.5">
@@ -47,6 +47,7 @@ export function ProductCard({ product, fit, inList, onShow, onAdd }: { product: 
         <button onClick={onAdd} disabled={inList} aria-label={inList ? t("added") : t("add")} title={inList ? t("added") : t("add")}
           className="grid h-11 w-11 shrink-0 place-items-center rounded-full border border-ink/14 text-[18px] disabled:text-fog">{inList ? "✓" : "+"}</button>
       </div>
+      {onDelete && <button onClick={onDelete} className="min-h-11 text-[14px] text-graphite hover:text-fit-no">{t("remove")}</button>}
     </article>
   );
 }

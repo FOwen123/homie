@@ -45,7 +45,8 @@ export type RoomState = {
 export type Card =
   | { type: "products"; title?: string; replace?: string; items: { product: Product; fit: FitResult; placementId?: string }[] }
   | { type: "photo"; placementId: string; productId: string }
-  | { type: "list" };
+  | { type: "list" }
+  | { type: "objects" };
 
 export type ChatTurn = { role: "user" | "assistant"; text: string; image?: string; cards?: Card[] };
 
