@@ -125,7 +125,7 @@ const T = {
   quickPlan: { zh: "我的房間還缺什麼？", en: "What does my room still need?" },
   quick1: { zh: "找一張 2,000 元內放得下的書桌", en: "Find a desk under NT$2,000 that fits" },
   quick2: { zh: "讓房間更溫馨一點", en: "Make it feel cozier" },
-  quick3: { zh: "給我看一張真實照片", en: "Show me a real photo of it" },
+  quick3: { zh: "幫我重新設計房間", en: "Redesign my room" },
   followYes: { zh: "好，幫我找最好的", en: "Yes, find the best buys" },
   followChange: { zh: "我想改這份清單", en: "Change the list" },
   followPhoto: { zh: "給我看一張真實照片", en: "Show me a real photo of it" },

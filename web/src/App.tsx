@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Chat, ShopAll, ShoppingList, freshPhotos, photoKey } from "./components/Chat";
+import { Chat, ShopAll, ShoppingList, RoomInventory, deleteRoomItem, freshPhotos, photoKey } from "./components/Chat";
 import { RoomViewer, type ViewMode } from "./components/RoomViewer";
 import { Upload } from "./components/Upload";
 import { Building } from "./components/Building";
@@ -86,7 +86,7 @@ function Landing() {
   const [catalog, setCatalog] = useState<Product[]>([]);
   useEffect(() => {
     fetch("/rooms/demo/room.json").then((r) => r.json()).then(setDemo);
-    fetch("/catalog.json").then((r) => r.json()).then(setCatalog);
+    fetch("/api/catalog").then((r) => r.json()).then(setCatalog);
   }, []);
   const products = useMemo(() => productMap(catalog), [catalog]);
   const fitOf = (pid: string) => { // the same check the room page runs: a free spot by the desk, then checkFit
@@ -284,7 +284,7 @@ function RoomPage({ id }: { id: string }) {
     return () => { live.alive = false; window.clearTimeout(live.timer); };
   }, [id, url]);
   useEffect(() => {
-    fetch("/catalog.json").then((r) => r.json()).then(setCatalog);
+    fetch("/api/catalog").then((r) => r.json()).then(setCatalog);
   }, [url]);
   useEffect(() => { if (room && !turns.length) setTurns([{ role: "assistant", text: t("greeting") }]); }, [room]); // eslint-disable-line
   useEffect(() => { // "Show me" on a not-yet-placed product: place it, then ask for a photo
@@ -317,7 +317,7 @@ function RoomPage({ id }: { id: string }) {
     </div>
   );
   const shown = withMoves(room, state); // the room as the user rearranged it
-  const obj = shown.objects.find((o) => o.id === selected);
+  const obj = shown.objects.find((o) => o.id === selected && !state.removed.includes(o.id));
   const placed = state.placements.find((p) => p.id === selected);
   const area = room.shell.width * room.shell.depth;
 
@@ -350,6 +350,7 @@ function RoomPage({ id }: { id: string }) {
               )}
               <p className="num hidden text-[11px] text-fog md:block">{t("dragHint")}</p>
             </div>
+            {(obj || placed) && <button onClick={() => { setState((cur) => deleteRoomItem(cur, selected!)); setSelected(null); }} className="absolute top-3 right-3 min-h-11 rounded-full bg-paper-white px-4 text-[14px] text-graphite">{t("remove")}</button>}
             {label && (obj || placed) && (
               <div className="pointer-events-auto absolute -translate-x-1/2 -translate-y-full" style={{ left: label.x, top: label.y - 6 }}>
                 {obj ? <MeasureChip obj={obj} size={state.sizeEdits[obj.id] ?? obj.size} edited={!!state.sizeEdits[obj.id]} onClick={() => setEditing(true)} />
@@ -364,11 +365,12 @@ function RoomPage({ id }: { id: string }) {
           {editing && obj && <SizeSheet key={obj.id} obj={obj} state={state} setState={setState} close={() => setEditing(false)} />}
         </section>
         <aside className="-mx-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-t-[28px] bg-paper-white shadow-float md:mx-0 md:w-[520px] md:flex-none md:rounded-[28px] md:shadow-none">
+          <RoomInventory room={shown} state={state} setState={setState} products={products} onFocus={setSelected} />
           <Tabs label={t("roomSections")} value={tab} onChange={setTab}
             items={[{ key: "chat", label: t("chatTab") }, { key: "shop", label: t("shop"), badge: state.list.length || undefined }]} />
           <div className="min-h-0 flex-1">
             {tab === "chat"
-              ? <Chat roomId={id} room={shown} state={state} setState={setState} products={products} turns={turns} setTurns={setTurns} onFocus={setSelected} selected={obj?.id} opened={opened} setOpened={setOpened} />
+              ? <Chat roomId={id} room={shown} state={state} setState={setState} products={products} turns={turns} setTurns={setTurns} onFocus={setSelected} selected={selected} setCatalog={setCatalog} autoRecommend={id !== "demo" && status?.state === "done"} opened={opened} setOpened={setOpened} />
               : <div className="h-full overflow-y-auto">
                   {/* one Shop tab: your list and checkout on top, every product that fits below */}
                   {state.list.length > 0 && !obj && <div className="px-4 pt-4"><ShoppingList state={state} setState={setState} products={products} t={t} opened={opened} setOpened={setOpened} /></div>}

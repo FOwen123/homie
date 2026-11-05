@@ -16,7 +16,7 @@ Raw uploads are deleted once a room is built; rooms (with their keyframes and cr
 Deploy (from the repo root; Modal tokens and the secret come from .env):
   set -a; . ./.env; set +a
   uv run --with modal modal deploy pipeline/modal_app.py
-The secret "homie" must hold META_MODEL_API_KEY and ROOMIE_UPLOAD_TOKEN.
+The secret "homie" must hold META_MODEL_API_KEY, ROOMIE_UPLOAD_TOKEN and APIFY_TOKEN.
 """
 import hashlib
 import hmac
@@ -119,6 +119,85 @@ def process(rid: str, kind: str):
         data.commit()
 
 
+products = modal.Dict.from_name("homie-products", create_if_missing=True)
+
+
+@app.function(image=image, secrets=[secret], max_containers=1, timeout=240)
+def search_products(query: str):
+    """One paid search at a time, one a day. All users reuse the results."""
+    import urllib.request
+
+    key = "query:" + hashlib.sha256(query.strip().lower().encode()).hexdigest()
+    cached = products.get(key)
+    if cached and time.time() - cached["at"] < 86400:
+        return {"products": cached["products"], "source": "cache"}
+    token = os.environ.get("APIFY_TOKEN")
+    if not token:
+        return {"products": [], "source": "cache", "notice": "Live search is not configured; using saved listings."}
+
+    def apify(path, body=None):
+        req = urllib.request.Request("https://api.apify.com/v2" + path,
+            data=json.dumps(body).encode() if body is not None else None,
+            headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=100) as res:
+            return json.load(res)
+
+    # Include infrastructure charges already reported by Apify. Keep headroom inside the US$3 project cap.
+    used = float(apify("/users/me/limits")["data"]["current"]["monthlyUsageUsd"])
+    reserved = max(used, float(status.get("apify:reserved", 0)))
+    if reserved + 0.10 > 3:
+        return {"products": [], "source": "cache", "notice": "Live search budget reached; using saved listings."}
+    day = time.strftime("%Y-%m-%d")
+    if not status.put("shop:" + day, 1, skip_if_exists=True):
+        return {"products": [], "source": "cache", "notice": "Today's live search was used; using saved listings."}
+    status["apify:reserved"] = reserved + 0.10  # never refund uncertain charges or reset the lifetime reservation
+    try:
+        rows = apify("/acts/memo23~shopee-scraper/run-sync-get-dataset-items?maxTotalChargeUsd=0.04&memory=512&timeout=75", {
+            "searchTerms": [query], "country": "TW", "mode": "search", "sortBy": "sales",
+            "minRating": 4.8, "minPrice": 50, "maxItems": 15,
+        })
+        prices = sorted(float(x.get("price") or 0) for x in rows)
+        median = prices[len(prices) // 2] if prices else 0
+        candidates = [x for x in rows if float(x.get("rating") or 0) >= 4.8
+            and 0 < float(x.get("position") or 999) <= 15
+            and float(x.get("price") or 0) >= max(30, median * .35)
+            and not re.search("海外|中國|大陸", str(x.get("location", "")))
+            and str(x.get("url", "")).startswith("https://shopee.tw/")][:5]
+        if not candidates:
+            return {"products": [], "source": "live", "notice": "No trusted live matches; using saved listings."}
+        details = apify("/acts/memo23~shopee-scraper/run-sync-get-dataset-items?maxTotalChargeUsd=0.03&memory=512&timeout=75", {
+            "startUrls": [{"url": x["url"]} for x in candidates], "mode": "product", "maxItems": len(candidates), "maxConcurrency": 2,
+        })
+        listings = []
+        for d in details:
+            x = next((x for x in candidates if str(x.get("itemId")) == str(d.get("itemId"))), None)
+            if not x or float(d.get("ratingCount") or 0) < 30 or float(d.get("shopRating") or 0) < 4.7:
+                continue
+            if d.get("isSoldOut") or d.get("stock") == 0:
+                continue
+            images = x.get("images", [])
+            if isinstance(images, str):
+                images = json.loads(images.replace("'", '"'))
+            image_url = (images or [x.get("imageUrl", "")])[0]
+            if not str(image_url).startswith("https://"):
+                continue
+            listings.append({"id": str(x["itemId"]), "title": x["title"], "price": float(x["price"]),
+                "url": x["url"], "image": image_url, "rating": float(x["rating"]),
+                "reviews": d["ratingCount"], "shop": d.get("shopName"),
+                "text": (str(x["title"]) + "\n" + str(d.get("description", "")))[:12000]})
+        found = []
+        if listings:
+            proc = subprocess.run(["bun", "/app/pipeline/live_products.ts"], cwd="/app", input=json.dumps({"listings": listings, "query": query}),
+                capture_output=True, text=True, timeout=60, check=True)
+            found = json.loads(proc.stdout.strip().splitlines()[-1])
+        for product in found:
+            products[product["id"]] = product
+        products[key] = {"at": time.time(), "products": found}
+        return {"products": found, "source": "live", "notice": "Shopee listing snapshot; confirm stock and variant price on Shopee."}
+    except Exception:
+        return {"products": [], "source": "cache", "notice": "Live search unavailable; using saved listings."}
+
+
 @app.function(image=image, volumes={"/data": data}, schedule=modal.Period(days=1))
 def cleanup():
     """Rooms are deleted 30 days after they were made; stray uploads after a day."""
@@ -174,6 +253,22 @@ def web():
         if int(n) > MAX_VIDEO:
             return JSONResponse({"error": "upload too big"}, 413)
         return None
+
+    @api.get("/products")
+    async def catalog(req: Request):
+        if not authed(req):
+            return JSONResponse({"error": "unauthorized"}, 401)
+        return [value for key, value in products.items() if key.startswith("sp")]
+
+    @api.post("/products/search")
+    async def product_search(req: Request):
+        if not authed(req):
+            return JSONResponse({"error": "unauthorized"}, 401)
+        body = await req.json()
+        query = str(body.get("query", "")).strip()
+        if not query or len(query) > 160:
+            return JSONResponse({"error": "invalid query"}, 400)
+        return await search_products.remote.aio(query)
 
     @api.post("/upload")
     async def upload(req: Request):
